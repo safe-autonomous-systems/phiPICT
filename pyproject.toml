@@ -8,11 +8,10 @@ license-files = ["LICENSE"]
 authors = [
     { name = "Jannis Becktepe", email = "jannis.becktepe@tu-dortmund.de" }
 ]
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.11,<3.15"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -105,7 +104,7 @@ testpaths = ["tests"]
 
 [tool.cibuildwheel]
 # The builds of one run are selected via CIBW_BUILD by .github/workflows/wheels.yml.
-build = "cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
+build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
 skip = "*musllinux*"
 # Build against the torch installed in before-build instead of the pinned
 # torch from [build-system], so the torch/CUDA combination can be selected.

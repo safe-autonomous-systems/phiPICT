@@ -9,7 +9,7 @@ version** (cu12 vs. cu13). A single wheel therefore cannot serve all setups.
 Same scheme as PyG (`torch-scatter`) and flash-attn.
 
 1. **Build matrix in CI** (cibuildwheel): one wheel per
-   Python (3.10–3.14) × torch minor × CUDA major, each built with the lowest
+   Python (3.11–3.14) × torch minor × CUDA major, each built with the lowest
    CUDA minor of its major. CUDA minor-version compatibility makes a cu130
    build work with torch cu130 and cu132, so no per-minor builds are needed.
    `release.yml` builds:

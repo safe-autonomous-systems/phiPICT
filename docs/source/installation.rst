@@ -2,7 +2,7 @@ Installation
 ============
 
 phiPICT ships a compiled CUDA extension (``phipict._C``). It requires Linux, an
-NVIDIA GPU, and Python 3.10–3.13. We recommend a dedicated virtual environment.
+NVIDIA GPU, and Python 3.11–3.14. We recommend a dedicated virtual environment.
 
 Which wheel do I need?
 ----------------------
