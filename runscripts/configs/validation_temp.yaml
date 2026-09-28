@@ -1,0 +1,74 @@
+# @package _global_
+defaults:
+  - _self_
+  - case: temp1_162
+
+precision: double
+init_with_grad: true
+
+warmup_time: 200.0
+log_time: 100.0
+
+warmup_steps: ${eval:${warmup_time} / ${sim.dt}}
+log_steps: ${eval:${log_time} / ${sim.dt}}
+log_interval: 1
+
+sgs_model: none
+sgs_coefficient: 0.325
+
+advection_scheme: linear_upwind
+
+hartmann_number: 100.0
+hartmann_Cw: 0.0
+prandtl_number: 0.025
+grashof_number: 3e7
+
+domain:
+  U: 1.0
+  T_hot: 0.5
+  T_cold: -0.5
+  L: 1.0
+  H: 7.5
+  nx: 64
+  ny: 480
+  nz: 64
+  grading_x_type: chebyshev_identity
+  grading_y_type: chebyshev_identity
+  grading_z_type: chebyshev_identity
+  grading_x: 0.96
+  grading_y: 0.0
+  grading_z: 0.96
+
+sim:
+  dt: 2e-4
+  corrector_steps: 2
+  tol_mode: absolute
+  advection_tol_mode: null
+  pressure_tol_mode: relative
+  potential_tol_mode: relative
+  tol_atol: 1e-14
+
+  advection_tol: 1e-8
+  pressure_tol: 1e-2
+  pressure_intermediate_tol_mode: relative
+  pressure_intermediate_tol: 1e-1
+  pressure_warm_start: true
+  potential_tol: 1e-4
+  potential_normalize: true
+  potential_use_BiCG: false
+  potential_solve_max_iter: 5000
+  pressure_solve_max_iter: 5000
+  adaptive_cfl: 0.8
+  potential_use_preconditioner: true
+  potential_amg_options: null
+
+hydra:
+  output_subdir: "."
+  run: 
+    dir: output/validation/${type}/${hartmann_number}_${hartmann_Cw}/${domain.nx}x${domain.ny}x${domain.nz}
+  sweep:
+    dir: output/validation/${type}/${hartmann_number}_${hartmann_Cw}/${domain.nx}x${domain.ny}x${domain.nz}
+    subdir: ""
+  job:
+    chdir: true
+

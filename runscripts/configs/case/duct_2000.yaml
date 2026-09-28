@@ -1,0 +1,4 @@
+# @package _global_
+type: duct
+
+hartmann_number: 2000.0

@@ -1,0 +1,43 @@
+# Solver ablation: PICT vs. phiPICT on any fluidgym environment.
+#   python runscripts/benchmark/ablate_solver_improvements.py                      # ablation=mhd
+#   python runscripts/benchmark/ablate_solver_improvements.py ablation=cylinder
+#   python runscripts/benchmark/ablate_solver_improvements.py env_id=HartmannMedium3D-downward-easy-v0
+# Outputs go to output/solver_ablation/<env_id>/.
+defaults:
+  - _self_
+  - ablation: mhd
+
+env_kwargs:
+  load_initial_domain: true
+  load_domain_statistics: false
+  randomize_initial_state: false
+
+seed: 42
+n_piso_steps: 5          # PISO steps per env step (step_length = n_piso_steps * dt)
+fixed_substeps: true     # one PISO step per substep: identical work per env step in every variant
+dt: null                 # null: the env's registered dt
+actions: random          # random (seeded, same sequence for every variant) | zero
+convergence_check: true  # separate untimed pass recording whether every solve converged
+convergence_check_steps: 1
+warmup_steps: 2          # untimed; the first one pays for one-off setups (AMG, CUDA graphs)
+repeats: 25              # timed env steps per variant
+skip_oom: true
+
+# fluidgym data directory (null: $FLUIDGYM_LOCAL_DATA_PATH or ./local_data)
+local_data_path: null
+# directory for the on-disk AMG interpolation cache (null: disabled)
+amg_cache_dir: null
+
+results_file: solver_ablation.csv
+summary_file: solver_ablation_summary.csv
+convergence_file: solver_convergence.csv
+plot_file: solver_ablation.pdf
+
+hydra:
+  run:
+    dir: output/solver_ablation/${env_id}
+  sweep:
+    dir: output/solver_ablation/${env_id}
+    subdir: ""
+  job:
+    chdir: true

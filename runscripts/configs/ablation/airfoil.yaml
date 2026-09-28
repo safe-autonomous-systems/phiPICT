@@ -1,0 +1,23 @@
+# @package _global_
+env_id: Airfoil3D-hard-v0
+
+variant_dir: solver_ablation
+variants:
+  - pict
+  - phipict
+
+baseline_variant: pict
+reference_variant: phipict
+
+# used by the variants with intermediate_tol: true
+# (10x the env's final pressure tolerance of atol=1e-8, as for the cylinder)
+pressure_tol_intermediate:
+  atol: 1.0e-7
+
+# iteration caps, the same for every variant
+shared_solver: {}
+
+# The airfoil relies on adaptive substepping (dt=0.05 at CFL 0.8): one PISO step of
+# the full dt per substep diverges. The PISO steps per env step are then set by the
+# CFL condition and recorded per variant (piso_steps_per_env_step).
+fixed_substeps: false

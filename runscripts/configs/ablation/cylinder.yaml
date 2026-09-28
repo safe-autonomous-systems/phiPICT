@@ -1,0 +1,17 @@
+# @package _global_
+env_id: CylinderJet3D-hard-v0
+
+variant_dir: solver_ablation
+variants:
+  - pict
+  - phipict
+
+baseline_variant: pict
+reference_variant: phipict
+
+# used by the variants with intermediate_tol: true
+pressure_tol_intermediate:
+  atol: 5.0e-6
+
+# iteration caps, the same for every variant
+shared_solver: {}

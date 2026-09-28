@@ -1,0 +1,9 @@
+# @package _global_
+type: temp1
+
+hartmann_number: 162.0
+
+domain:
+  nx: 64
+  ny: 480
+  nz: 64

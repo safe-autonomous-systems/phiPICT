@@ -1,0 +1,13 @@
+# @package _global_
+defaults:
+  - shercliff_20
+  - _self_
+
+reynolds_number: 10.0
+hartmann_number: 100.0
+
+sim:
+  dt: 1e-3
+
+domain:
+  nz: 60

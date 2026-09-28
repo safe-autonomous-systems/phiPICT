@@ -1,0 +1,49 @@
+name: Wheel index
+
+# Regenerates the pip find-links pages (whl/torch-X.Y+cuXYZ.html) on gh-pages
+# from the wheels attached to all published releases.
+on:
+  release:
+    types: [published, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check out gh-pages
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages; then
+            git fetch origin gh-pages
+            git worktree add pages origin/gh-pages
+          else
+            git worktree add --orphan -b gh-pages pages
+          fi
+
+      - name: Generate index
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/make_wheel_index.py "$GITHUB_REPOSITORY" pages/whl
+
+      - name: Push
+        working-directory: pages
+        run: |
+          touch .nojekyll
+          git add .nojekyll whl
+          if git diff --cached --quiet; then
+            echo "Index unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update wheel index"
+          git push origin HEAD:gh-pages

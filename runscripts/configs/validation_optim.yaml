@@ -1,0 +1,17 @@
+# @package _global_
+defaults:
+  - _self_
+
+domain_type: hartmann
+loss_tol: 1e-5
+
+hydra:
+  output_subdir: "."
+  run: 
+    dir: output/validation/optim/${domain_type}
+  sweep:
+    dir: output/validation/optim/${domain_type}
+    subdir: ""
+  job:
+    chdir: true
+

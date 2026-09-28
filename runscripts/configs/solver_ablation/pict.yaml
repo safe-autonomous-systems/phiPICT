@@ -1,0 +1,20 @@
+# Every switch of the solver stack; this variant is the behaviour of the original PICT.
+# Solver tolerances are part of the environment and are the same in every variant.
+name: pict
+label: PICT
+# linear solver backend (csrc/phipict/solvers/krylov): fused sync-free kernels vs. legacy cuBLAS/cuSPARSE
+fused_krylov: false
+krylov_graphs: false        # capture the fused solves in CUDA graphs
+cg_preconditioner: none     # none | jacobi (CG solves without AMG)
+bicg_preconditioner: none   # none | jacobi
+# AMG
+native_amg: false               # CUDA AMG-PCG vs. pure-torch implementation
+pressure_amg: false             # true | false | null (auto: large systems only)
+share_amg_interpolation: false  # one host-side setup per sparsity pattern + GPU Galerkin refresh
+amg_fp32_vcycle: false          # float32 V-cycle for float64 solves
+coarse_refresh_interval: 1      # full Galerkin refresh of the pressure hierarchy every n-th matrix
+# per-simulation features
+intermediate_tol: false     # looser tolerance (ablation.pressure_tol_intermediate) for all but the last corrector
+pressure_warm_start: false  # start pressure solves from the previous result
+potential_amg: false        # AMG-preconditioned potential solve (MHD only)
+potential_reuse_result: false  # start potential solves from the previous result (MHD only)

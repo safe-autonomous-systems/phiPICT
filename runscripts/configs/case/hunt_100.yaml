@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - shercliff_100
+  - _self_
+
+type: hunt
+hartmann_Cw: 0.1
+
+pressure_gradient: -10.0
+
+max_steps: 400

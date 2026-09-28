@@ -1,0 +1,9 @@
+# @package _global_
+defaults:
+  - hartmann_0
+
+reynolds_number: 2.0
+hartmann_number: 10.0
+
+min_steps: 2000
+max_steps: 20000

@@ -1,0 +1,24 @@
+# @package _global_
+# Generic PICT vs. phiPICT ablation for any fluidgym environment:
+#   python runscripts/benchmark/ablate_solver_improvements.py ablation=fluidgym env_id=RBC2D-easy-v0
+env_id: ???
+
+variant_dir: solver_ablation
+variants:
+  - pict
+  - phipict
+
+baseline_variant: pict
+reference_variant: phipict
+
+# used by the variants with intermediate_tol: true;
+# auto = 10x the env's own final pressure tolerance
+pressure_tol_intermediate: auto
+
+# iteration caps, the same for every variant
+shared_solver: {}
+
+# Keep the env's own (adaptive) substepping: one PISO step of the full dt per
+# substep can diverge (e.g. the airfoil). The PISO steps per env step are recorded
+# per variant (piso_steps_per_env_step).
+fixed_substeps: false

@@ -1,0 +1,20 @@
+# @package _global_
+env_id: HartmannSmall3D-downward-easy-v0
+
+variant_dir: solver_ablation
+variants:
+  - pict
+  - phipict
+
+baseline_variant: pict
+reference_variant: phipict
+
+# used by the variants with intermediate_tol: true
+pressure_tol_intermediate:
+  rtol: 1.0e-1
+  atol: 1.0e-14
+
+# iteration caps, the same for every variant
+shared_solver:
+  linear_solve_max_iter: 10000
+  potential_solve_max_iter: 10000

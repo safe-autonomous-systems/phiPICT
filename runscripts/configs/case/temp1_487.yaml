@@ -1,0 +1,5 @@
+# @package _global_
+defaults:
+  - temp1_325
+
+hartmann_number: 487.0

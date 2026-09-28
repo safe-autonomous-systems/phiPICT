@@ -1,0 +1,12 @@
+# @package _global_
+type: hartmann
+
+pressure_gradient: -1.0
+dynamic_forcing: true
+forcing_factor: 0.1
+
+reynolds_number: 2.0
+hartmann_number: 0.0
+
+min_steps: 1000
+max_steps: 15000

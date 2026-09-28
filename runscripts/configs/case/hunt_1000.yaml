@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - shercliff_1000
+  - _self_
+
+type: hunt
+hartmann_Cw: 0.1
+
+reynolds_number: 700.0
+
+max_steps: 20000

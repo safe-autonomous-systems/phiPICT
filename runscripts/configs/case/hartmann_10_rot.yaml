@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - hartmann_10
+
+rotate_grid_deg: 15
+
+hydra:
+  run: 
+    dir: output/validation/${type}_rot/${hartmann_number}/${domain.nx}x${domain.ny}
+  sweep:
+    dir: output/validation/${type}_rot/${hartmann_number}/${domain.nx}x${domain.ny}

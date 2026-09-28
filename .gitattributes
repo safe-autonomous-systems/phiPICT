@@ -1,0 +1,17 @@
+# Line endings: LF in the repository and in every working tree
+* text=auto eol=lf
+
+# Binary files (never touch their bytes)
+*.so binary
+*.pyd binary
+*.pt binary
+*.pth binary
+*.npy binary
+*.npz binary
+*.h5 binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.mp4 binary
+*.pdf binary
+*.exr binary

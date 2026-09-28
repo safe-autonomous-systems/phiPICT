@@ -1,0 +1,70 @@
+# @package _global_
+defaults:
+  - _self_
+  - case: duct_2000
+
+init_with_noise: True
+init_with_analytical_profile: True
+pressure_gradient: -42.79
+dynamic_forcing: False
+forcing_factor: 0.1
+
+precision: double
+max_steps: 100000
+log_interval: 5000
+
+hartmann_Cw: 0.03
+reynolds_number: 2000.0
+hartmann_number: 2000.0
+
+domain:
+  duct: full
+  U: 1.0
+  L: 1.0
+  length: 5.0
+  nx: 300
+  ny: 70
+  nz: 100
+  grading_y_type: simple
+  grading_z_type: simple
+  grading_y: 50
+  grading_z: 200
+
+sim:
+  dt: 1e-4
+  corrector_steps: 2
+  potential_normalize: true
+  potential_use_BiCG: false
+  potential_solve_max_iter: 10000
+  pressure_solve_max_iter: 10000
+  adaptive_cfl: 0.8
+
+# Linear solve tolerances
+tol:
+  mode: absolute
+  advection_mode: null
+  advection: 1e-6
+  pressure_mode: relative
+  pressure: 1e-2
+  pressure_intermediate_mode: relative
+  pressure_intermediate: 1e-1
+  potential_mode: relative
+  potential: 1e-4
+  atol: 1e-14
+
+pressure_warm_start: true
+potential_return_best_result: true
+potential_reuse_result: true
+potential_use_preconditioner: true
+potential_amg_options: null
+
+hydra:
+  output_subdir: "."
+  run:
+    dir: output/validation/duct/${hartmann_number}/${domain.nx}x${domain.ny}x${domain.nz}_${domain.duct}
+  sweep:
+    dir: output/validation/duct/${hartmann_number}/${domain.nx}x${domain.ny}x${domain.nz}_${domain.duct}
+    subdir: ""
+  job:
+    chdir: true
+

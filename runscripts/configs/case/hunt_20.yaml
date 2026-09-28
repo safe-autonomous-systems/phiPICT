@@ -1,0 +1,9 @@
+# @package _global_
+defaults:
+  - shercliff_20
+  - _self_
+
+type: hunt
+hartmann_Cw: 0.1
+
+max_steps: 500

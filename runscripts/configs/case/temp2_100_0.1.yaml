@@ -1,0 +1,5 @@
+# @package _global_
+defaults:
+  - temp2_100_0
+
+hartmann_Cw: 0.1

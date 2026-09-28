@@ -1,0 +1,15 @@
+# @package _global_
+type: temp1
+
+hartmann_number: 325.0
+
+domain:
+  nx: 96
+  ny: 720
+  nz: 96
+  grading_x_type: tanh
+  grading_y_type: chebyshev_identity
+  grading_z_type: chebyshev_identity
+  grading_x: 3.0
+  grading_y: 0.0
+  grading_z: 0.96

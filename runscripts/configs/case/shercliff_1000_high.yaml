@@ -1,0 +1,10 @@
+# @package _global_
+defaults:
+  - shercliff_1000
+  - _self_
+
+domain:
+  nx: 100
+  ny: 150
+  nz: 150
+

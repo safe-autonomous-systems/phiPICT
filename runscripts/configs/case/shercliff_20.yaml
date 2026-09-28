@@ -1,0 +1,31 @@
+# @package _global_
+type: shercliff
+
+pressure_gradient: -1.0
+
+reynolds_number: 9.0
+hartmann_number: 20.0
+
+max_steps: 2000
+
+sim:
+  dt: 5e-3
+  advection_tol: 1e-7
+  pressure_tol: 1e-8
+  potential_tol: 1e-8
+
+domain:
+  L: 2.0
+  H: 1.0
+  U: 1.0
+  nx: 50
+  ny: 40
+  nz: 40
+  grading_y: 200
+  grading_z: 50
+
+hydra:
+  run:
+    dir: output/validation/${type}/${hartmann_number}/${domain.nx}x${domain.ny}x${domain.nz}
+  sweep:
+    dir: output/validation/${type}/${hartmann_number}/${domain.nx}x${domain.ny}x${domain.nz}

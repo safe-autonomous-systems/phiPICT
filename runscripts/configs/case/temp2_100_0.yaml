@@ -1,0 +1,25 @@
+# @package _global_
+type: temp2
+
+warmup_time: 20.0
+log_time: 10.0
+log_interval: 0.5
+
+hartmann_number: 100.0
+hartmann_Cw: 0.0
+
+prandtl_number: 0.0321
+grashof_number: 3.115e6
+
+domain:
+  L: 1.0
+  H: 1.0
+  nx: 64
+  ny: 64
+  nz: 64
+  grading_x_type: tanh
+  grading_y_type: tanh
+  grading_z_type: tanh
+  grading_x: 2.5
+  grading_y: 2.5
+  grading_z: 2.5

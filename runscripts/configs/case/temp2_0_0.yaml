@@ -1,0 +1,9 @@
+# @package _global_
+defaults:
+  - temp2_100_0
+
+warmup_time: 30.0
+log_time: 10.0
+
+hartmann_number: 0.0
+hartmann_Cw: 0.0

@@ -1,0 +1,211 @@
+name: Release
+
+# Manual only (Actions -> Release -> Run workflow). Builds the default wheels
+# (untagged version, for PyPI) and, with `index`, one wheel per Python x torch x
+# CUDA combination (version tagged +ptXYcuXYZ) for the own wheel index.
+#
+# To publish, run it on a tag vX.Y.Z (select the tag instead of a branch) with
+# target testpypi or pypi; the tag must match VERSION in setup.py. TestPyPI and
+# PyPI are separate registries, so the exact release version can be tested on
+# TestPyPI first. A file name can only be uploaded once; to retry on TestPyPI,
+# set build_number (phipict-0.1.0-1-cp312-...whl); never used for PyPI.
+# target pypi with `index` also creates a *draft* GitHub release with the index
+# wheels (publishing it triggers wheel-index.yml).
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Upload the default wheels to"
+        type: choice
+        options: [none, testpypi, pypi]
+        default: none
+      build_number:
+        description: "Wheel build number for TestPyPI retries (empty = none)"
+        type: string
+        default: ""
+      index:
+        description: "Also build the +ptXYcuXYZ wheels for the wheel index"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Default combination published to (Test)PyPI (also the first combination of
+# the build matrix below). DEFAULT_ARCH_LIST is used for all wheels. It must
+# match the CUDA build of the torch wheel on PyPI, since `pip install phipict` pulls torch from PyPI:
+# torch <= 2.10 on PyPI is built with CUDA 12.8, torch >= 2.11 with CUDA 13.0
+# (needs driver >= 580). 2.10 is the newest torch that runs on 570 drivers.
+env:
+  DEFAULT_TORCH: "2.10"
+  DEFAULT_CUDA: "12.8"
+  DEFAULT_CUDA_TAG: cu128
+  DEFAULT_ARCH_LIST: "8.0;9.0;10.0;12.0+PTX"
+
+jobs:
+  # Fails before the (long) builds if the run cannot be published.
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check ref and inputs
+        env:
+          TARGET: ${{ inputs.target }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          if [[ -n $BUILD_NUMBER ]]; then
+            [[ $BUILD_NUMBER =~ ^[0-9]+$ ]] || { echo "::error::build_number must be a number"; exit 1; }
+            [[ $TARGET == testpypi ]] || { echo "::error::build_number is only for TestPyPI retries"; exit 1; }
+          fi
+          [[ $TARGET == none ]] && exit 0
+          [[ $GITHUB_REF == refs/tags/v* ]] || { echo "::error::publishing needs a vX.Y.Z tag; select it in Run workflow"; exit 1; }
+          version=$(sed -nE 's/^VERSION = "(.+)"/\1/p' setup.py)
+          [[ v$version == "$GITHUB_REF_NAME" ]] || { echo "::error::tag $GITHUB_REF_NAME does not match VERSION $version in setup.py"; exit 1; }
+
+  build:
+    if: inputs.index
+    needs: check
+    name: ${{ matrix.python }} torch${{ matrix.torch }} ${{ matrix.cuda_tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    # One wheel per torch minor x CUDA major, built with the lowest CUDA minor
+    # of that major: CUDA minor-version compatibility makes a cu130 build work
+    # with torch cu130 and cu132. torch 2.10 is the only version whose PyPI
+    # wheel is CUDA 12 (drivers < 580); newer torch versions get CUDA 13.
+    # torch is a minor version; the latest patch release is used.
+    strategy:
+      fail-fast: false
+      matrix:
+        python: [cp310, cp311, cp312, cp313, cp314]
+        combo: [pt210cu128, pt211cu130, pt212cu130, pt213cu130, pt214cu130]
+        include:
+          - {combo: pt210cu128, torch: "2.10", cuda: "12.8", cuda_tag: cu128}
+          - {combo: pt211cu130, torch: "2.11", cuda: "13.0", cuda_tag: cu130}
+          - {combo: pt212cu130, torch: "2.12", cuda: "13.0", cuda_tag: cu130}
+          - {combo: pt213cu130, torch: "2.13", cuda: "13.0", cuda_tag: cu130}
+          - {combo: pt214cu130, torch: "2.14", cuda: "13.0", cuda_tag: cu130}
+    steps:
+      - uses: actions/checkout@v5
+
+      # The CUDA toolkit and torch do not fit into the default free disk space.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+
+      - uses: pypa/cibuildwheel@v3.2
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-manylinux_x86_64
+          TORCH_VERSION: ${{ matrix.torch }}
+          CUDA_VERSION: ${{ matrix.cuda }}
+          CUDA_TAG: ${{ matrix.cuda_tag }}
+          TORCH_CUDA_ARCH_LIST: ${{ env.DEFAULT_ARCH_LIST }}
+          PHIPICT_LOCAL_VERSION: "1"
+        with:
+          output-dir: wheelhouse
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.python }}-${{ matrix.combo }}
+          path: wheelhouse/*.whl
+
+  build-default:
+    needs: check
+    name: ${{ matrix.python }} default (PyPI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        python: [cp310, cp311, cp312, cp313, cp314]
+    steps:
+      - uses: actions/checkout@v5
+
+      # The CUDA toolkit and torch do not fit into the default free disk space.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+
+      # No local version tag (PyPI rejects it), but pin torch==X.Y.* since the
+      # extension is ABI-bound to the torch minor version.
+      - uses: pypa/cibuildwheel@v3.2
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-manylinux_x86_64
+          TORCH_VERSION: ${{ env.DEFAULT_TORCH }}
+          CUDA_VERSION: ${{ env.DEFAULT_CUDA }}
+          CUDA_TAG: ${{ env.DEFAULT_CUDA_TAG }}
+          TORCH_CUDA_ARCH_LIST: ${{ env.DEFAULT_ARCH_LIST }}
+          PHIPICT_LOCAL_VERSION: "0"
+          PHIPICT_PIN_TORCH: "1"
+        with:
+          output-dir: wheelhouse
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pypi-wheel-${{ matrix.python }}
+          path: wheelhouse/*.whl
+
+  publish:
+    if: inputs.target != 'none'
+    needs: build-default
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Trusted publishing: this repo/workflow/environment is registered as a
+    # publisher on test.pypi.org (environment testpypi) and pypi.org
+    # (environment pypi), see CI.md; no token needed.
+    environment:
+      name: ${{ inputs.target }}
+      url: https://${{ inputs.target == 'testpypi' && 'test.' || '' }}pypi.org/p/phipict
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: pypi-wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Set wheel build number
+        if: inputs.build_number != ''
+        run: pipx run wheel tags --remove --build "${{ inputs.build_number }}" dist/*.whl
+
+      - name: Check version against tag
+        run: |
+          for f in dist/*; do
+            case ${f#dist/} in
+              phipict-${GITHUB_REF_NAME#v}-*.whl | phipict-${GITHUB_REF_NAME#v}.tar.gz) ;;
+              *) echo "::error::$f does not match tag $GITHUB_REF_NAME"; exit 1 ;;
+            esac
+          done
+          ls dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ inputs.target == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+          # a file name can only be uploaded once; re-runs skip the uploaded ones
+          skip-existing: true
+
+  release:
+    if: inputs.target == 'pypi' && inputs.index
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: dist/*.whl

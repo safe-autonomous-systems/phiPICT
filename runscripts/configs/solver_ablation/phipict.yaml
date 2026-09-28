@@ -1,0 +1,20 @@
+# Every switch of the solver stack; this variant is phiPICT with all features.
+# Solver tolerances are part of the environment and are the same in every variant.
+name: phipict
+label: '$\phi$-PICT (ours)'
+# linear solver backend (csrc/phipict/solvers/krylov): fused sync-free kernels vs. legacy cuBLAS/cuSPARSE
+fused_krylov: true
+krylov_graphs: true         # capture the fused solves in CUDA graphs
+cg_preconditioner: jacobi   # none | jacobi (CG solves without AMG)
+bicg_preconditioner: none   # none | jacobi
+# AMG
+native_amg: true                # CUDA AMG-PCG vs. pure-torch implementation
+pressure_amg: null              # true | false | null (auto: large systems only)
+share_amg_interpolation: true   # one host-side setup per sparsity pattern + GPU Galerkin refresh
+amg_fp32_vcycle: true           # float32 V-cycle for float64 solves
+coarse_refresh_interval: 4      # full Galerkin refresh of the pressure hierarchy every n-th matrix
+# per-simulation features
+intermediate_tol: true      # looser tolerance (ablation.pressure_tol_intermediate) for all but the last corrector
+pressure_warm_start: true   # start pressure solves from the previous result
+potential_amg: true         # AMG-preconditioned potential solve (MHD only)
+potential_reuse_result: true   # start potential solves from the previous result (MHD only)

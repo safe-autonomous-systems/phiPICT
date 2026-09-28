@@ -1,0 +1,88 @@
+name: Docs
+
+# Manual only (Actions -> Docs -> Run workflow). Builds the Sphinx docs of the
+# selected branch/tag; with `deploy`, publishes them to the gh-pages branch
+# (GitHub Pages source: gh-pages / root). The wheel index (whl/, maintained by
+# wheel-index.yml) is kept.
+#
+# No GPU build is needed: without the compiled extension, conf.py mocks
+# phipict._C, so only the signatures of the pybind11 classes are missing.
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Publish to GitHub Pages (gh-pages branch)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          activate-environment: true
+      # CPU torch is enough to import the Python package for autodoc
+      - run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: uv pip install numpy scipy sphinx sphinx-rtd-theme
+      - run: make -C docs html
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: docs/build/html
+          retention-days: 7
+
+  deploy:
+    if: inputs.deploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    # shared with wheel-index.yml, which also pushes to gh-pages
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check out gh-pages
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages; then
+            git fetch origin gh-pages
+            git worktree add pages origin/gh-pages
+          else
+            git worktree add --orphan -b gh-pages pages
+          fi
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: docs-html
+          path: html
+
+      - name: Replace the docs, keep the wheel index
+        run: |
+          find pages -mindepth 1 -maxdepth 1 ! -name .git ! -name whl -exec rm -rf {} +
+          cp -r html/. pages/
+          touch pages/.nojekyll
+
+      - name: Push
+        working-directory: pages
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Docs unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update documentation (${GITHUB_REF_NAME}@${GITHUB_SHA::7})"
+          git push origin HEAD:gh-pages
