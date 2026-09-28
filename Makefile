@@ -63,7 +63,7 @@ install-dev:
 	MAX_JOBS=1 \
 	TORCH_CUDA_ARCH_LIST="8.0;8.6;9.0+PTX" \
 	PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 \
-	$(PIP) install -e ".[dev]"
+	$(PIP) install --no-build-isolation -e ".[dev]"
 	$(MAKE) stubs
 
 .PHONY: clean
