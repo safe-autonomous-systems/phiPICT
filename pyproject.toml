@@ -126,6 +126,7 @@ environment-pass = [
 environment = """
 CUDA_HOME=/usr/local/cuda-$CUDA_VERSION
 PATH=/usr/local/cuda-$CUDA_VERSION/bin:/opt/rh/gcc-toolset-13/root/usr/bin:$PATH
+PIP_NO_CACHE_DIR=1
 """
 before-all = """
 curl -sSL https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo \
@@ -133,12 +134,17 @@ curl -sSL https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/
 dnf clean all
 dnf -y install cuda-toolkit-$(echo $CUDA_VERSION | tr . -)
 case $CUDA_VERSION in 12.[0-7]) dnf -y install gcc-toolset-13-gcc-c++ ;; esac
+dnf clean all
 """
 # TORCH_VERSION is a minor version (2.14); the latest patch release is used.
 before-build = """
 pip install "torch==$TORCH_VERSION.*" --index-url https://download.pytorch.org/whl/$CUDA_TAG
 pip install "setuptools>=77" wheel numpy
 """
+# The test venv installs torch with its CUDA wheels again; remove the toolkit
+# (only needed to build) to free the disk. The repaired wheel needs only what
+# torch provides, as for users without a toolkit.
+before-test = "rm -rf /usr/local/cuda-$CUDA_VERSION /usr/local/cuda"
 # libtorch and the CUDA runtime are provided by the user's torch install and
 # must not be vendored into the wheel.
 repair-wheel-command = """

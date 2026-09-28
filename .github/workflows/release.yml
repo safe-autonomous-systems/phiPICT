@@ -88,11 +88,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The CUDA toolkit and torch do not fit into the default free disk space.
+      # The CUDA toolkit, torch (for the build and again in cibuildwheel's test
+      # venv) and the Docker image do not fit into the default free disk space
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/lib/jvm \
+            /usr/local/share/powershell
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile /swapfile || true
+          sudo apt-get clean
           sudo docker image prune --all --force
           df -h /
 
@@ -124,11 +129,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The CUDA toolkit and torch do not fit into the default free disk space.
+      # The CUDA toolkit, torch (for the build and again in cibuildwheel's test
+      # venv) and the Docker image do not fit into the default free disk space
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/lib/jvm \
+            /usr/local/share/powershell
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile /swapfile || true
+          sudo apt-get clean
           sudo docker image prune --all --force
           df -h /
 
