@@ -45,7 +45,7 @@ Same scheme as PyG (`torch-scatter`) and flash-attn.
 Wheels are built by `.github/workflows/release.yml` on GitHub Actions, one
 cibuildwheel job per Python × torch/CUDA combination, only when started
 manually (*Actions → Release → Run workflow*, pick the branch or tag to build).
-The index wheels (`index` input) are the `build` job's matrix; `DEFAULT_ARCH_LIST`
+The index wheels (`index` input) are the `build-index` job's matrix; `DEFAULT_ARCH_LIST`
 sets the GPU archs (`8.0;9.0;10.0;12.0+PTX`) for all wheels.
 
 - The cibuildwheel configuration lives in `[tool.cibuildwheel]` in
