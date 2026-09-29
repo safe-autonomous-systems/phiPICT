@@ -1,8 +1,7 @@
 [project]
 name = "phipict"
-dynamic = ["version", "dependencies"]  # set in setup.py
+dynamic = ["version", "dependencies", "readme"]  # set in setup.py
 description = "Differentiable multi-block PISO MHD solver for PyTorch"
-readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
