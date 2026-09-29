@@ -289,11 +289,14 @@ void Block::setVelocitySource(torch::Tensor &t){
 	velocitySource = t;
 	velocitySourceStatic = t.dim()==2; //velocityStatic;
 	
-	// keep gradient coherent
+	// keep gradient coherent. The grad is only scratch space of the backward pass (every
+	// backward recreates it with zeros_like(velocitySource) before its kernel and reads it out
+	// right after), so a stale one of the other shape is dropped. That happens when a hook
+	// switches between a static and a varying source within a step (e.g. the channel forcing
+	// and the MHD Lorentz force) and a checkpoint replays the forward during backward.
 	if(velocitySource_grad){
 		if(!(velocitySource_grad.value().dim()==t.dim())){
-			// TODO if grad is static: broadcast to varying, else: sum to static
-			TORCH_CHECK(false, "New velocity source does not match existing gradient tensor.");
+			velocitySource_grad = nullopt;
 		}
 	}
 

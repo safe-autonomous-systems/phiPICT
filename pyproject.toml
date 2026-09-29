@@ -8,24 +8,24 @@ license-files = ["LICENSE"]
 authors = [
     { name = "Jannis Becktepe", email = "jannis.becktepe@tu-dortmund.de" }
 ]
-requires-python = ">=3.11,<3.15"
+requires-python = ">=3.11,<3.14"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
 ]
 
 [project.optional-dependencies]
+# pyamg is a default dependency (setup.py); the extra is kept so that
+# phipict[amg] requirements keep working
 amg = ["pyamg>=4.0"]
 # grid plots and image output in phipict.io.output (imported on first use)
 plot = ["matplotlib>=3.9", "imageio"]
 utils = ["psutil"]
-all = ["phipict[amg,plot,utils]"]
+all = ["phipict[plot,utils]"]
 dev = [
-    "phipict[amg]",
     "pre-commit",
     "ruff",
     "mypy",
@@ -104,7 +104,7 @@ testpaths = ["tests"]
 
 [tool.cibuildwheel]
 # The builds of one run are selected via CIBW_BUILD by .github/workflows/wheels.yml.
-build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
+build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64"
 skip = "*musllinux*"
 # Build against the torch installed in before-build instead of the pinned
 # torch from [build-system], so the torch/CUDA combination can be selected.
