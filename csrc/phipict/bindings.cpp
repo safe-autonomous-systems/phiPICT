@@ -87,7 +87,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 		.value("INSULATING", PotentialBC::INSULATING, "Solid insulating wall, j_n = 0 (default).")
 		.value("OPEN", PotentialBC::OPEN, "Open in/outflow plane, dphi/dn = 0, j_n = (u x B)_n.")
 		.value("DIRICHLET", PotentialBC::DIRICHLET, "phi = 0 (grounded or odd symmetry plane).")
-		.value("THIN_WALL", PotentialBC::THIN_WALL, "Thin conducting wall, dphi/dn = Cw * laplace_tau(phi).");
+		.value("THIN_WALL", PotentialBC::THIN_WALL, "Thin conducting wall, dphi/dn = Cw * laplace_tau(phi).")
+		.value("CURRENT", PotentialBC::CURRENT, "Prescribed current into the fluid per face cell (the cell's potential value).");
 	
     py::class_<CSRmatrix, std::shared_ptr<CSRmatrix>>(m, "CSRmatrix")
         .def(py::init<torch::Tensor &, torch::Tensor &, torch::Tensor &>())
@@ -187,6 +188,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 		.def("clearPotentialValues", &FixedBoundary::clearPotentialValues)
 		.def("hasPotentialDirichlet", &FixedBoundary::hasPotentialDirichlet,
 			"True if any cell of the face is phi=0 Dirichlet (anchors the Epot matrix).")
+		.def("hasPotentialCurrent", &FixedBoundary::hasPotentialCurrent,
+			"True if any cell of the face has a prescribed current (CURRENT).")
 		.def("hasPotentialThinWall", &FixedBoundary::hasPotentialThinWall)
 		// legacy flag interface, wrappers over the PotentialBC above
 		.def("setEpotCw", &FixedBoundary::setEpotCw,

@@ -52,8 +52,9 @@ template<typename scalar_t>
 	return static_cast<PotentialBC>(fb.potentialTypes[flattenIndex(facePos, fb.potentialStride)]);
 }
 
-/** Prescribed φ of the face cell of `pos` on FIXED bound `idx`, 0 if the face has no
- *  values. Only meaningful where potentialBCAt is DIRICHLET. */
+/** Value of the face cell of `pos` on FIXED bound `idx`, 0 if the face has no values:
+ *  the prescribed φ where potentialBCAt is DIRICHLET, the prescribed current into the fluid
+ *  through the cell where it is CURRENT. Meaningless elsewhere. */
 template<typename scalar_t>
  __host__ __device__ inline
  scalar_t potentialValueAt(const I4 &pos, const index_t idx, const BoundaryGPU<scalar_t> *bounds){
@@ -104,6 +105,17 @@ template<typename scalar_t>
 	if(bounds[idx].type!=BoundaryType::FIXED) return false;
 	const PotentialBC bc = potentialBCAt(pos, idx, bounds);
 	return bc==PotentialBC::INSULATING || bc==PotentialBC::THIN_WALL;
+}
+
+/** True if the face cell of `pos` on bound `idx` has a prescribed current (CURRENT): the
+ *  normal current into the fluid is the cell's potential value, both in the Poisson RHS and
+ *  in the reconstructed current density. Like an insulating wall it is a Neumann face of
+ *  the matrix, and with a zero value it is exactly that wall. */
+template<typename scalar_t>
+ __host__ __device__ inline
+ bool isEpotCurrentBound(const I4 &pos, const index_t idx, const BoundaryGPU<scalar_t> *bounds){
+	return bounds[idx].type==BoundaryType::FIXED
+		&& potentialBCAt(pos, idx, bounds)==PotentialBC::CURRENT;
 }
 
 /** True if the face cell of `pos` on bound `idx` is a thin conducting wall. */

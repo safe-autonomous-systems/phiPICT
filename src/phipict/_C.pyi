@@ -960,6 +960,10 @@ class FixedBoundary(Boundary):
         ...
     def hasPassiveScalar(self) -> bool:
         ...
+    def hasPotentialCurrent(self) -> bool:
+        """
+        True if any cell of the face has a prescribed current (CURRENT).
+        """
     def hasPotentialDirichlet(self) -> bool:
         """
         True if any cell of the face is phi=0 Dirichlet (anchors the Epot matrix).
@@ -1123,12 +1127,15 @@ class PotentialBC:
       DIRICHLET : phi = 0 (grounded or odd symmetry plane).
     
       THIN_WALL : Thin conducting wall, dphi/dn = Cw * laplace_tau(phi).
+    
+      CURRENT : Prescribed current into the fluid per face cell (the cell's potential value).
     """
+    CURRENT: typing.ClassVar[PotentialBC]  # value = <PotentialBC.CURRENT: 4>
     DIRICHLET: typing.ClassVar[PotentialBC]  # value = <PotentialBC.DIRICHLET: 2>
     INSULATING: typing.ClassVar[PotentialBC]  # value = <PotentialBC.INSULATING: 0>
     OPEN: typing.ClassVar[PotentialBC]  # value = <PotentialBC.OPEN: 1>
     THIN_WALL: typing.ClassVar[PotentialBC]  # value = <PotentialBC.THIN_WALL: 3>
-    __members__: typing.ClassVar[dict[str, PotentialBC]]  # value = {'INSULATING': <PotentialBC.INSULATING: 0>, 'OPEN': <PotentialBC.OPEN: 1>, 'DIRICHLET': <PotentialBC.DIRICHLET: 2>, 'THIN_WALL': <PotentialBC.THIN_WALL: 3>}
+    __members__: typing.ClassVar[dict[str, PotentialBC]]  # value = {'INSULATING': <PotentialBC.INSULATING: 0>, 'OPEN': <PotentialBC.OPEN: 1>, 'DIRICHLET': <PotentialBC.DIRICHLET: 2>, 'THIN_WALL': <PotentialBC.THIN_WALL: 3>, 'CURRENT': <PotentialBC.CURRENT: 4>}
     def __eq__(self, other: typing.Any) -> bool:
         ...
     def __getstate__(self) -> int:

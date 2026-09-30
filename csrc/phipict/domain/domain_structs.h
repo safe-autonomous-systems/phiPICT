@@ -227,8 +227,9 @@ public:
 	bool hasPotentialTypes() const { return m_potentialTypes.has_value(); }
 	void clearPotentialTypes() { m_potentialTypes = nullopt; isTensorChanged=true; }
 	GET_OPTIONAL_DATA_PRT(PotentialTypes, m_potentialTypes);
-	// Prescribed φ of the DIRICHLET cells, shape [1 or batch,1,(D),H,W] like the types (read
-	// only at DIRICHLET cells; nullopt: φ = 0). Enters the Poisson RHS and the current density
+	// Values of the DIRICHLET and CURRENT cells, shape [1 or batch,1,(D),H,W] like the types:
+	// the prescribed φ of a DIRICHLET cell, the current into the fluid through a CURRENT cell
+	// (read only at those cells; nullopt: 0). Enters the Poisson RHS and the current density
 	// only, never the matrix, so it can change every step (e.g. wall electrodes as actuators)
 	// and differ between batched environments while the matrix stays shared.
 	optional<torch::Tensor> m_potentialValues = nullopt;
@@ -237,6 +238,8 @@ public:
 	void clearPotentialValues() { m_potentialValues = nullopt; isTensorChanged=true; }
 	/** True if any cell of the face is φ Dirichlet, i.e. the face anchors the Epot matrix. */
 	bool hasPotentialDirichlet() const;
+	/** True if any cell of the face has a prescribed current (CURRENT). */
+	bool hasPotentialCurrent() const;
 	bool hasPotentialThinWall() const;
 
 	// Legacy flag interface, kept as thin wrappers over the PotentialBC above.

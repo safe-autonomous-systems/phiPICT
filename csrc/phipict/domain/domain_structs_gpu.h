@@ -219,7 +219,11 @@ enum class PotentialBC : PotentialBC_base_type{
 	INSULATING=0, // solid insulating wall: j_n = 0 (dφ/dn = (u×B)_n, flux dropped)
 	OPEN=1,       // open in/outflow plane: dφ/dn = 0, j_n = (u×B)_n
 	DIRICHLET=2,  // φ = 0 (grounded plane / odd symmetry plane); anchors the matrix
-	THIN_WALL=3   // thin conducting wall: dφ/dn = Cw ∇²_τ φ, j_n = 0 into the wall
+	THIN_WALL=3,  // thin conducting wall: dφ/dn = Cw ∇²_τ φ, j_n = 0 into the wall
+	CURRENT=4     // prescribed current: the face cell's value is the current into the
+	              // fluid through it (integrated over the cell, not a density). Neumann
+	              // like INSULATING, so the matrix is unchanged; at zero current it is the
+	              // insulating wall exactly
 };
 
 

@@ -71,6 +71,12 @@ def _epot_matrix_is_anchored(domain: _C.Domain) -> bool:
     ``phi -> phi + const``, so a thin-wall-only domain is as singular as an
     insulating one.
 
+    A prescribed current (CURRENT) does not anchor it either: it is a Neumann face
+    of the matrix, its current entering the right-hand side only. The system then
+    stays singular, so the prescribed currents have to sum to zero (e.g. an
+    electrode pair), or the mean projection of the right-hand side spreads the
+    excess over the volume.
+
     Parameters
     ----------
     domain : phipict._C.Domain

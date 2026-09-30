@@ -23,6 +23,7 @@ import phipict
 from phipict import _C, Face, PotentialBC, bc
 from phipict.core import piso_diff
 from phipict.grid import shapes
+from phipict.grid.helpers import get_cell_size
 from phipict.io.domain_io import load_domain, save_domain
 from phipict.simulation.mhd import _epot_matrix_is_anchored
 
@@ -36,6 +37,7 @@ SPECS = {
     PotentialBC.OPEN: bc.Potential.Open(),
     PotentialBC.DIRICHLET: bc.Potential.Dirichlet(),
     PotentialBC.THIN_WALL: bc.Potential.ThinWall(cw=CW),
+    PotentialBC.CURRENT: bc.Potential.Current(),
 }
 
 
@@ -124,6 +126,9 @@ PAIRS = [
     (PotentialBC.OPEN, PotentialBC.INSULATING),
     (PotentialBC.THIN_WALL, PotentialBC.INSULATING),
     (PotentialBC.THIN_WALL, PotentialBC.DIRICHLET),
+    (PotentialBC.CURRENT, PotentialBC.INSULATING),
+    (PotentialBC.CURRENT, PotentialBC.DIRICHLET),
+    (PotentialBC.THIN_WALL, PotentialBC.CURRENT),
 ]
 
 
@@ -711,6 +716,322 @@ def test_dirichlet_values_gradient_through_mhd_steps() -> None:
     with torch.no_grad():
         plus, _ = loss(values + eps * direction)
         minus, _ = loss(values - eps * direction)
+    fd = float((plus - minus) / (2 * eps))
+    ad = float((grad * direction).sum())
+    assert abs(ad - fd) <= 1e-6 * abs(fd), f"AD {ad:.10e} vs FD {fd:.10e}"
+
+
+# ---------------------------------------------------------------------------
+# Prescribed current (CURRENT)
+# ---------------------------------------------------------------------------
+
+
+def _electrode_masks() -> tuple[torch.Tensor, torch.Tensor]:
+    """Two electrodes over the ±y face cells [NZ, NX], one per face."""
+    lower = torch.zeros(NZ, NX, dtype=torch.bool)
+    lower[1:3, 1:3] = True
+    upper = torch.zeros(NZ, NX, dtype=torch.bool)
+    upper[2:4, 4:7] = True
+    return lower, upper
+
+
+def _dense_epot(domain: _C.Domain) -> torch.Tensor:
+    assert domain.Epot is not None
+    n = domain.getTotalSize()
+    return torch.sparse_csr_tensor(
+        domain.Epot.row.long(),
+        domain.Epot.index.long(),
+        domain.Epot.value[: domain.Epot.getNnz()],
+        (n, n),
+    ).to_dense()
+
+
+@pytest.mark.filterwarnings("ignore:Sparse CSR tensor support is in beta")
+def test_zero_current_is_insulating_wall() -> None:
+    """Current cells at zero current give exactly the insulating wall's solve."""
+    lower, upper = _electrode_masks()
+
+    def electrodes(block: _C.Block) -> None:
+        bc.set_bc(block, Face.Y_MINUS, bc.Potential.Current(value=0.0), where=lower)
+        bc.set_bc(block, Face.Y_PLUS, bc.Potential.Current(value=0.0), where=upper)
+
+    plain, with_electrodes = _domain(None), _domain(electrodes)
+    assert not _epot_matrix_is_anchored(with_electrodes)
+    ref, new = _operators(plain), _operators(with_electrodes)
+    for name in ref:
+        assert torch.equal(ref[name], new[name]), name
+
+    # a few MHD steps from the same state give the same flow
+    gen = torch.Generator(device=DEVICE).manual_seed(11)
+    v0 = 0.1 * torch.randn(1, 3, NZ, NY, NX, dtype=DTYPE, device=DEVICE, generator=gen)
+    fields = []
+    for domain in (plain, with_electrodes):
+        block = domain.getBlock(0)
+        block.setVelocity(v0.clone())
+        domain.UpdateDomainData()
+        sim = phipict.MHDSimulation(
+            domain=domain,
+            dt=5e-3,
+            stuart_number=torch.tensor(20.0),
+            e_b=torch.tensor([0.0, 1.0, 0.0], dtype=DTYPE),
+            substeps=1,
+            non_orthogonal=False,
+            potential_use_preconditioner=False,
+            potential_tol=phipict.SolverTolerance(rtol=1e-10, atol=1e-14),
+        )
+        for _ in range(3):
+            assert sim.single_step()
+        assert block.epot is not None
+        fields.append((block.velocity.clone(), block.epot.clone()))
+    for ref_field, new_field in zip(*fields, strict=True):
+        torch.testing.assert_close(new_field, ref_field, rtol=0, atol=1e-12)
+
+
+@pytest.mark.filterwarnings("ignore:Sparse CSR tensor support is in beta")
+def test_current_reproduces_dirichlet_currents() -> None:
+    """Prescribing the currents of a Dirichlet solution reproduces that solution.
+
+    Electrodes held at fixed potentials on both ±y faces, no u×B: the currents
+    into the fluid through their cells, prescribed as Current cells instead, give
+    the same potential (up to the free constant) and the same current density.
+    This pins the sign convention on lower and upper faces alike.
+    """
+    lower, upper = _electrode_masks()
+    potentials = {Face.Y_MINUS: 0.8, Face.Y_PLUS: -0.3}
+    masks = {Face.Y_MINUS: lower, Face.Y_PLUS: upper}
+    wall_y = {Face.Y_MINUS: 0, Face.Y_PLUS: NY - 1}
+
+    def dirichlet(block: _C.Block) -> None:
+        for face, value in potentials.items():
+            bc.set_bc(
+                block, face, bc.Potential.Dirichlet(value=value), where=masks[face]
+            )
+
+    domain_d = _domain(dirichlet)
+    n = domain_d.getTotalSize()
+    zero_ucb = torch.zeros(3 * n, dtype=DTYPE, device=DEVICE)
+    rhs_d = _C.ComputeEpotRHS(domain_d, zero_ucb)
+    phi_d = torch.linalg.solve(_dense_epot(domain_d), rhs_d)
+    J_d = _C.ComputeCurrentDensityFaceBased(domain_d, phi_d, zero_ucb)
+
+    # the RHS carries -coef*g at a Dirichlet cell: unit values give the coefficients
+    block_d = domain_d.getBlock(0)
+    for face in potentials:
+        bc.set_potential_values(block_d, face, 1.0, where=masks[face])
+    coef = -_C.ComputeEpotRHS(domain_d, zero_ucb)
+
+    # the current into the fluid through every electrode cell, coef (g - phi_P)
+    currents = {}
+    for face, value in potentials.items():
+        values = torch.zeros(NZ, NX, dtype=DTYPE, device=DEVICE)
+        for z in range(NZ):
+            for x in range(NX):
+                if masks[face][z, x]:
+                    cell = _flat(z, wall_y[face], x)
+                    values[z, x] = coef[cell] * (value - phi_d[cell])
+        currents[face] = values
+    total = sum(float(values.sum()) for values in currents.values())
+    assert abs(total) < 1e-10, "the insulated duct conserves the electrode current"
+    assert float(currents[Face.Y_MINUS].sum()) > 0
+
+    def prescribed(block: _C.Block) -> None:
+        for face, values in currents.items():
+            bc.set_bc(
+                block, face, bc.Potential.Current(value=values), where=masks[face]
+            )
+
+    domain_c = _domain(prescribed)
+    rhs_c = _C.ComputeEpotRHS(domain_c, zero_ucb)
+    assert abs(float(rhs_c.sum())) < 1e-10
+    phi_c = torch.linalg.pinv(_dense_epot(domain_c)) @ rhs_c
+    offset = phi_c - phi_d
+    torch.testing.assert_close(
+        offset - offset.mean(), torch.zeros_like(offset), rtol=0, atol=1e-9
+    )
+    J_c = _C.ComputeCurrentDensityFaceBased(domain_c, phi_c, zero_ucb)
+    torch.testing.assert_close(J_c, J_d, rtol=0, atol=1e-9)
+
+
+def test_set_potential_current_spreads_by_area() -> None:
+    """The total current is shared by the cells' areas, on a graded face."""
+    mask = torch.zeros(NY, NX, dtype=torch.bool)
+    mask[1:5, 2:6] = True
+
+    def electrode(block: _C.Block) -> None:
+        bc.set_bc(block, Face.Z_MINUS, bc.Potential.Current(), where=mask)
+
+    domain = _domain(electrode)
+    block = domain.getBlock(0)
+    bc.set_potential_current(block, Face.Z_MINUS, 2.0, where=mask)
+    values = block.getBoundary(Face.Z_MINUS).potentialValues
+    assert values is not None
+    values = values[0, 0, 0]  # [NY, NX]
+    torch.testing.assert_close(
+        values.sum(), torch.tensor(2.0, dtype=DTYPE, device=DEVICE)
+    )
+    assert torch.all(values[~mask.to(DEVICE)] == 0)
+
+    # uniform density: the share of a cell is its area dx*dy, from the cell volume
+    area = get_cell_size(block)[0, 0, 0] / (2.0 / NZ)  # [NY, NX], z is uniform
+    density = values[mask.to(DEVICE)] / area[mask.to(DEVICE)]
+    torch.testing.assert_close(density, density.mean().expand_as(density))
+    # the y grading makes the shares differ, so this is not a plain even split
+    assert float(values[mask.to(DEVICE)].std()) > 0
+
+    # one total per environment
+    batched = _domain(electrode, batch=2)
+    bc.set_potential_current(
+        batched.getBlock(0),
+        Face.Z_MINUS,
+        torch.tensor([1.0, -3.0], dtype=DTYPE),
+        where=mask,
+    )
+    per_env = batched.getBlock(0).getBoundary(Face.Z_MINUS).potentialValues
+    assert per_env is not None
+    torch.testing.assert_close(
+        per_env.sum(dim=(1, 2, 3, 4)),
+        torch.tensor([1.0, -3.0], dtype=DTYPE, device=DEVICE),
+    )
+
+
+def test_save_load_keeps_current_values(tmp_path) -> None:
+    lower, _ = _electrode_masks()
+    values = torch.linspace(-1, 1, NZ * NX, dtype=DTYPE).reshape(NZ, NX)
+
+    def set_bcs(block: _C.Block) -> None:
+        bc.set_bc(block, Face.Y_MINUS, bc.Potential.Current(value=values), where=lower)
+
+    domain = _domain(set_bcs)
+    ref = _operators(domain)
+    path = tmp_path / "domain"
+    save_domain(domain, path)
+    loaded = load_domain(path, dtype=DTYPE, device=DEVICE)
+    loaded.PrepareSolve()
+    loaded.SetupEpotOnDomain(0, False)
+    new = _operators(loaded)
+    for name in ref:
+        assert torch.equal(ref[name], new[name]), name
+
+
+@pytest.mark.parametrize("shared", [False, True])
+def test_current_values_adjoint(shared: bool) -> None:
+    """RHS and current density gradients w.r.t. prescribed currents match FD.
+
+    Electrodes on both ±y faces (the +y one next to thin-wall cells), per
+    environment or shared by the environments.
+    """
+    batch = 2
+    lower, upper = _electrode_masks()
+
+    def structure(block: _C.Block) -> None:
+        bc.set_bc(block, Face.Y_MINUS, bc.Potential.Current(), where=lower)
+        bc.set_bc(block, Face.Y_PLUS, bc.Potential.ThinWall(cw=CW))
+        bc.set_bc(block, Face.Y_PLUS, bc.Potential.Current(), where=upper)
+
+    domain = _domain(structure, batch=batch)
+    block = domain.getBlock(0)
+    n = domain.getTotalSize() * batch
+    gen = torch.Generator(device=DEVICE).manual_seed(12)
+    ucb = torch.randn(3 * n, dtype=DTYPE, device=DEVICE, generator=gen)
+    phi = torch.randn(n, dtype=DTYPE, device=DEVICE, generator=gen)
+    shape = (NZ, NX) if shared else (batch, NZ, NX)
+    values_lower = torch.randn(*shape, dtype=DTYPE, device=DEVICE, generator=gen)
+    values_upper = torch.randn(*shape, dtype=DTYPE, device=DEVICE, generator=gen)
+    values_lower.requires_grad_(True)
+    values_upper.requires_grad_(True)
+
+    def set_values(g_lower: torch.Tensor, g_upper: torch.Tensor) -> None:
+        bc.set_potential_values(block, Face.Y_MINUS, g_lower)
+        bc.set_potential_values(block, Face.Y_PLUS, g_upper)
+
+    def rhs(g_lower: torch.Tensor, g_upper: torch.Tensor) -> torch.Tensor:
+        set_values(g_lower, g_upper)
+        return piso_diff.ComputeEpotRHS(domain, ucb)
+
+    def current(g_lower: torch.Tensor, g_upper: torch.Tensor) -> torch.Tensor:
+        set_values(g_lower, g_upper)
+        return piso_diff.ComputeCurrentDensityFaceBased(domain, phi, ucb)
+
+    for fn in (rhs, current):
+        assert torch.autograd.gradcheck(
+            fn, (values_lower, values_upper), eps=1e-6, atol=1e-8, nondet_tol=1e-12
+        )
+
+    # the currents act at the electrode cells only
+    (grad_lower,) = torch.autograd.grad(
+        rhs(values_lower, values_upper).sum(), [values_lower]
+    )
+    grad_cells = grad_lower if shared else grad_lower[0]
+    assert torch.all(grad_cells[~lower.to(DEVICE)] == 0)
+    assert torch.all(grad_cells[lower.to(DEVICE)] != 0)
+
+
+def test_current_gradient_through_mhd_steps() -> None:
+    """d loss / d prescribed currents through differentiable MHD steps matches FD."""
+    batch, steps = 2, 2
+    lower, upper = _electrode_masks()
+
+    def structure(block: _C.Block) -> None:
+        bc.set_bc(block, Face.Y_MINUS, bc.Potential.Current(), where=lower)
+        bc.set_bc(block, Face.Y_PLUS, bc.Potential.Current(), where=upper)
+
+    gen = torch.Generator(device=DEVICE).manual_seed(13)
+    v0 = 0.1 * torch.randn(
+        batch, 3, NZ, NY, NX, dtype=DTYPE, device=DEVICE, generator=gen
+    )
+    w_vel = torch.rand(batch, 3, NZ, NY, NX, dtype=DTYPE, device=DEVICE, generator=gen)
+    w_phi = torch.randn(batch, 1, NZ, NY, NX, dtype=DTYPE, device=DEVICE, generator=gen)
+
+    def dipole(total: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # +I spread over the lower electrode, -I over the upper one: zero net
+        # current, as the singular potential system requires
+        lower_values = total[:, None, None] * lower.to(DEVICE) / lower.sum()
+        upper_values = -total[:, None, None] * upper.to(DEVICE) / upper.sum()
+        return lower_values, upper_values
+
+    totals = torch.tensor([0.7, -1.3], dtype=DTYPE, device=DEVICE)
+    direction = torch.tensor([1.0, 0.5], dtype=DTYPE, device=DEVICE)
+    tight = phipict.SolverTolerance(rtol=1e-12, atol=1e-14)
+
+    def loss(total: torch.Tensor) -> tuple[torch.Tensor, _C.Domain]:
+        domain = _domain(structure, batch=batch)
+        block = domain.getBlock(0)
+        block.setVelocity(v0.clone())
+        domain.UpdateDomainData()
+        sim = phipict.MHDSimulation(
+            domain=domain,
+            dt=5e-3,
+            stuart_number=torch.tensor(20.0),
+            e_b=torch.tensor([0.0, 1.0, 0.0], dtype=DTYPE),
+            substeps=1,
+            non_orthogonal=False,
+            differentiable=True,
+            advection_tol=tight,
+            pressure_tol=tight,
+            potential_tol=tight,
+            potential_use_preconditioner=False,
+            potential_return_best_result=False,
+        )
+        lower_values, upper_values = dipole(total)
+        bc.set_potential_values(block, Face.Y_MINUS, lower_values)
+        bc.set_potential_values(block, Face.Y_PLUS, upper_values)
+        for _ in range(steps):
+            assert sim.single_step()
+        assert block.epot is not None
+        epot = block.epot - block.epot.mean(dim=(1, 2, 3, 4), keepdim=True)
+        value = (w_vel * block.velocity**2).sum() + (w_phi * epot).sum()
+        return value, domain
+
+    total = totals.clone().requires_grad_(True)
+    value, domain = loss(total)
+    (grad,) = torch.autograd.grad(value, total)
+    domain.Detach()
+    assert torch.all(grad != 0)
+
+    eps = 1e-4
+    with torch.no_grad():
+        plus, _ = loss(totals + eps * direction)
+        minus, _ = loss(totals - eps * direction)
     fd = float((plus - minus) / (2 * eps))
     ad = float((grad * direction).sum())
     assert abs(ad - fd) <= 1e-6 * abs(fd), f"AD {ad:.10e} vs FD {fd:.10e}"

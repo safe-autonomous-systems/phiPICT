@@ -922,7 +922,7 @@ void FixedBoundary::setPotentialTypes(const torch::Tensor &types, optional<doubl
 	TORCH_CHECK(types.numel() > 0, "Potential BC types must not be empty.");
 	const int64_t minType = types.min().item<int64_t>();
 	const int64_t maxType = types.max().item<int64_t>();
-	TORCH_CHECK(minType >= static_cast<int64_t>(PotentialBC::INSULATING) && maxType <= static_cast<int64_t>(PotentialBC::THIN_WALL),
+	TORCH_CHECK(minType >= static_cast<int64_t>(PotentialBC::INSULATING) && maxType <= static_cast<int64_t>(PotentialBC::CURRENT),
 		"Potential BC types contain values that are not PotentialBC members.");
 
 	const bool anyThinWall = (types == static_cast<int64_t>(PotentialBC::THIN_WALL)).any().item<bool>();
@@ -954,6 +954,13 @@ bool FixedBoundary::hasPotentialDirichlet() const {
 		return (m_potentialTypes.value() == static_cast<int64_t>(PotentialBC::DIRICHLET)).any().item<bool>();
 	}
 	return m_potentialType == PotentialBC::DIRICHLET;
+}
+
+bool FixedBoundary::hasPotentialCurrent() const {
+	if(m_potentialTypes.has_value()){
+		return (m_potentialTypes.value() == static_cast<int64_t>(PotentialBC::CURRENT)).any().item<bool>();
+	}
+	return m_potentialType == PotentialBC::CURRENT;
 }
 
 bool FixedBoundary::hasPotentialThinWall() const {

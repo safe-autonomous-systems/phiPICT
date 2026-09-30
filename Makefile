@@ -52,10 +52,15 @@ format:
 test:
 	$(PYTEST) $(TEST_DIR)
 
+# Same as install-dev, but a regular install without the development tools and
+# the noise extension. The stubs (src/phipict/*.pyi) are committed; regenerating
+# them needs both, so only install-dev does it.
 .PHONY: install
-install: clean build
-	$(PIP) install dist/phipict-*.whl
-	$(MAKE) stubs
+install:
+	MAX_JOBS=1 \
+	TORCH_CUDA_ARCH_LIST="8.0;8.6;9.0+PTX" \
+	PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 \
+	$(PIP) install --no-build-isolation .
 
 .PHONY: install-dev
 install-dev:

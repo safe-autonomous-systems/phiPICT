@@ -874,7 +874,14 @@ __device__ void computeEpotFluxesNDLoop(const I4 pos, scalar_t* fluxes, const Bl
 				// Solid wall: insulating, j_n = 0 -> drop the flux.
 				// Open bound: ∂φ/∂n=0, so j_b = (u×B)_n evaluated at the cell centre
 				// (zero-gradient extrapolation), matching computeCurrentDensityFaceBased.
-				fluxes[bound] = isInsulatingWallBound(pos, bound, block.boundaries) ? 0 : velC;
+				// Prescribed current I into the fluid: the flux along +axis is +I through a
+				// lower face and -I through an upper one, again as in the reconstruction.
+				if(isEpotCurrentBound(pos, bound, block.boundaries)){
+					const scalar_t current = potentialValueAt(pos, bound, block.boundaries);
+					fluxes[bound] = isUpper ? -current : current;
+				} else {
+					fluxes[bound] = isInsulatingWallBound(pos, bound, block.boundaries) ? 0 : velC;
+				}
 				break;
 			case BoundaryType::CONNECTED_GRID:
 			{
@@ -1006,7 +1013,10 @@ __device__ void ScatterFieldDivGradNDLoop(
 				case BoundaryType::GRADIENT:
 					// Open bound: forward flux = velC (cell-centre (u×B)_n) -> full-weight
 					// grad to P. Solid wall: forward flux is the constant 0 -> no grad.
-					if(!isInsulatingWallBound(pos, bound, block.boundaries)){
+					// Prescribed current: the flux is the value, independent of (u×B) ->
+					// no grad here (the value's gradient is taken in k_computeEpotRHSGrad)
+					if(!isInsulatingWallBound(pos, bound, block.boundaries)
+							&& !isEpotCurrentBound(pos, bound, block.boundaries)){
 						velCGrad += fluxesGrad[bound];
 					}
 					break;

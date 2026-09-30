@@ -759,10 +759,15 @@ __device__ void computeCurrentDensityFaceBased(
 			// i.e. j_b = alpha*faceSign*(φ_P - g) + (u×B)_n.
 			// The alpha is the matrix's Dirichlet coefficient (alphaP*raP, raP=1), so the
 			// φ term cancels the diagonal the matrix adds for this face.
+			// Prescribed current I into the fluid: j_b = -faceSign*I along +axis (+I through
+			// a lower face, -I through an upper one), independent of φ and (u×B).
 			// Each case matches the RHS flux in computeEpotFluxesNDLoop, keeping div(j)=0
 			// discrete against the Poisson matrix.
 			if(isInsulatingWallBound(pos, bound, block.boundaries)){
 				j_face[bound] = 0;
+			} else if(isEpotCurrentBound(pos, bound, block.boundaries)){
+				j_face[bound] = -static_cast<scalar_t>(faceSign)
+					* potentialValueAt(pos, bound, block.boundaries);
 			} else if(isEpotDirichletBound(pos, bound, block.boundaries)){
 				const scalar_t g = potentialValueAt(pos, bound, block.boundaries);
 				j_face[bound] = alphaP[dim] * static_cast<scalar_t>(faceSign) * (phiP - g) + cvelP[dim];
@@ -1006,11 +1011,19 @@ __global__ void k_computeEpotRHSGrad(
 
 		// Adjoint of the Dirichlet term div -= coef*g: each face cell belongs to this cell
 		// only, and the gradient holds one slice per environment, so no atomics are needed.
+		// A prescribed current I enters the divergence as -I through a lower (flux +I) and
+		// an upper face (flux -I) alike, see computeEpotFluxesNDLoop.
 		for(index_t bound=0; bound<(s_domain.numDims*2); ++bound){
 			if(!isAtBound(pos, bound, &s_block) || !isEmptyBound(bound, s_block.boundaries)) continue;
-			if(!isEpotDirichletBound(pos, bound, s_block.boundaries)) continue;
+			const bool isDirichlet = isEpotDirichletBound(pos, bound, s_block.boundaries);
+			const bool isCurrent = isEpotCurrentBound(pos, bound, s_block.boundaries);
+			if(!isDirichlet && !isCurrent) continue;
 			scalar_t *gradG = potentialValueGradPtr(pos, bound, s_block.boundaries);
 			if(gradG == nullptr) continue;
+			if(isCurrent){
+				*gradG -= divGrad;
+				continue;
+			}
 			I4 tempPos = pos;
 			tempPos.w = axisFromBound(bound);
 			*gradG -= getLaplaceCoefficientOrthogonalDimSwitch(tempPos, &s_block, s_domain.numDims) * divGrad;
@@ -1127,6 +1140,13 @@ __device__ void computeCurrentDensityFaceBasedGrad(
 			// Forward at a solid wall: j_face[bound] = 0, a constant with no dependence on
 			// either phi or (u×B) -> nothing to scatter.
 			if(isInsulatingWallBound(pos, bound, block.boundaries)) continue;
+			// Forward at a prescribed current: j_face[bound] = -faceSign*I, independent of
+			// phi and (u×B); only the value I gets a gradient (this cell's face cell only)
+			if(isEpotCurrentBound(pos, bound, block.boundaries)){
+				scalar_t *gradG = potentialValueGradPtr(pos, bound, block.boundaries);
+				if(gradG != nullptr) *gradG -= static_cast<scalar_t>(faceSign) * grad_j_face[bound];
+				continue;
+			}
 			// Forward at a φ=0 Dirichlet bound carries an extra alpha*faceSign*phi_P term
 			// (ghost cell), which depends on this cell's own phi only.
 			if(isEpotDirichletBound(pos, bound, block.boundaries)){

@@ -33,10 +33,10 @@ The face must be FIXED (made by ``Block.CloseBoundary`` or ``Block.OpenBoundary`
 since only those carry field conditions. Set conditions before the simulation is
 created: :class:`~phipict.MHDSimulation` assembles the potential matrix once.
 
-The *values* of Dirichlet potential cells are the exception: they enter only the
-right-hand side, never the matrix, so they may change every step and differ between
-batched environments. That makes wall electrodes usable as actuators next to fixed
-insulating wall parts::
+The *values* of Dirichlet and Current potential cells are the exception: they enter
+only the right-hand side, never the matrix, so they may change every step and differ
+between batched environments. That makes wall electrodes usable as actuators next to
+fixed insulating wall parts::
 
     bc.set_bc(block, Face.Y_MINUS, bc.Potential.Dirichlet(), where=electrodes)
     sim = phipict.MHDSimulation(domain=domain, ...)
@@ -44,6 +44,11 @@ insulating wall parts::
         # [NZ, NX] for all environments, or [B, NZ, NX] per environment
         bc.set_potential_values(block, Face.Y_MINUS, action)
         sim.single_step()
+
+Current cells prescribe the current into the fluid instead of the potential, e.g.
+an electrode fed by a current source; :func:`set_potential_current` spreads a total
+current evenly over an electrode's area. With zero current they are the insulating
+wall exactly.
 """
 
 from __future__ import annotations
@@ -64,6 +69,7 @@ __all__ = [
     "Velocity",
     "get_bc",
     "set_bc",
+    "set_potential_current",
     "set_potential_values",
 ]
 
@@ -125,6 +131,39 @@ class Potential:
 
         def __eq__(self, other: object) -> bool:
             if not isinstance(other, Potential.Dirichlet):
+                return NotImplemented
+            a, b = self.value, other.value
+            if isinstance(a, torch.Tensor) or isinstance(b, torch.Tensor):
+                return (
+                    isinstance(a, torch.Tensor)
+                    and isinstance(b, torch.Tensor)
+                    and torch.equal(a, b)
+                )
+            return a == b
+
+    @dataclass(frozen=True, eq=False)
+    class Current:
+        """Prescribed current into the fluid, e.g. an electrode fed by a current source.
+
+        The value of a cell is the current through it, integrated over its area (not
+        a current density); positive values flow into the fluid. Like an insulating
+        wall the face is a Neumann face of the potential matrix, and with zero
+        current it is exactly that wall. It does not anchor the potential, so the
+        currents of all Current cells (plus any flux through open faces) have to sum
+        to zero, or the solver's projection spreads the excess over the volume.
+
+        Attributes
+        ----------
+        value : float or torch.Tensor or None
+            Current of the cells, as for :func:`set_potential_values`. None keeps the
+            current values (0 if none were set).
+        """
+
+        value: float | torch.Tensor | None = None
+        type = _C.PotentialBC.CURRENT
+
+        def __eq__(self, other: object) -> bool:
+            if not isinstance(other, Potential.Current):
                 return NotImplemented
             a, b = self.value, other.value
             if isinstance(a, torch.Tensor) or isinstance(b, torch.Tensor):
@@ -225,7 +264,11 @@ class Scalar:
 
 
 PotentialSpec: TypeAlias = (
-    Potential.Insulating | Potential.Open | Potential.Dirichlet | Potential.ThinWall
+    Potential.Insulating
+    | Potential.Open
+    | Potential.Dirichlet
+    | Potential.Current
+    | Potential.ThinWall
 )
 VelocitySpec: TypeAlias = Velocity.Dirichlet | Velocity.Neumann
 ScalarSpec: TypeAlias = Scalar.Dirichlet | Scalar.Neumann
@@ -286,7 +329,7 @@ def _write_potential_values(
     value: float | torch.Tensor,
     mask: torch.Tensor | None,
 ) -> None:
-    """Write ``value`` into the face's Dirichlet values where ``mask`` is set."""
+    """Write ``value`` into the face's potential values where ``mask`` is set."""
     full = _face_shape(block, face)
     cells = _face_cells(block, face)
     dtype, device = block.velocity.dtype, block.velocity.device
@@ -349,14 +392,17 @@ def set_potential_values(
     values: float | torch.Tensor,
     where: torch.Tensor | None = None,
 ) -> None:
-    """Set the prescribed ``phi`` of a face's Dirichlet cells.
+    """Set the values of a face's Dirichlet and Current cells.
 
-    Only the right-hand side depends on these values, so this is cheap enough to
-    call every step: the matrix (and its AMG hierarchy) is not rebuilt, and the
-    values are written in place whenever their shape allows it. Values that need
-    a gradient (or replace ones that do) are installed as a new per-environment
-    tensor instead, so the potential kernels differentiate w.r.t. them. Values at
-    cells that are not Dirichlet are stored but have no effect.
+    A Dirichlet cell's value is its prescribed ``phi``, a Current cell's the
+    current into the fluid through it (see :class:`Potential.Current`, and
+    :func:`set_potential_current` for a total current). Only the right-hand side
+    depends on these values, so this is cheap enough to call every step: the
+    matrix (and its AMG hierarchy) is not rebuilt, and the values are written in
+    place whenever their shape allows it. Values that need a gradient (or replace
+    ones that do) are installed as a new per-environment tensor instead, so the
+    potential kernels differentiate w.r.t. them. Values at other cells are stored
+    but have no effect.
 
     Parameters
     ----------
@@ -382,12 +428,87 @@ def set_potential_values(
     _write_potential_values(block, face, bound, values, mask)
 
 
+def _face_cell_areas(block: _C.Block, face: Face) -> torch.Tensor:
+    """Areas of the face's cells (lengths in 2D), shaped like ``where``."""
+    vertices = block.vertexCoordinates  # [1, dims, (z+1), y+1, x+1], channels x, y, z
+    if not isinstance(vertices, torch.Tensor):
+        raise ValueError(f"Block '{block.name}' has no vertex coordinates.")
+    dims = vertices.shape[1]
+    # tensor axis of the face normal and the vertex layer of the face
+    normal = 2 + dims - 1 - face.axis
+    layer = 0 if face.value % 2 == 0 else vertices.shape[normal] - 1
+    v = vertices[0].select(normal - 1, layer)  # [dims, *face vertices]
+    if dims == 2:
+        return torch.linalg.vector_norm(v[:, 1:] - v[:, :-1], dim=0)
+    # quads from the face vertex grid, area 0.5 |d1 x d2| from the two diagonals
+    d1 = v[:, 1:, 1:] - v[:, :-1, :-1]
+    d2 = v[:, 1:, :-1] - v[:, :-1, 1:]
+    return 0.5 * torch.linalg.vector_norm(torch.linalg.cross(d1, d2, dim=0), dim=0)
+
+
+def set_potential_current(
+    block: _C.Block,
+    face: Face,
+    current: float | torch.Tensor,
+    where: torch.Tensor,
+) -> None:
+    """Spread a total current evenly over the area of a face's Current cells.
+
+    Every masked cell gets the share of ``current`` its area has of the masked
+    area, i.e. a uniform current density, e.g. one electrode fed by a current
+    source. The other cells keep their values.
+
+    Parameters
+    ----------
+    block : phipict.Block
+        Block whose face is set.
+    face : Face
+        The face; must be FIXED, and the masked cells Current cells.
+    current : float or torch.Tensor
+        Total current into the fluid, a scalar for all environments or ``[batch]``
+        with one per environment.
+    where : torch.Tensor
+        Boolean mask over the face cells (the electrode).
+
+    Raises
+    ------
+    ValueError
+        If the face is not FIXED, a shape does not match or the mask is empty.
+    """
+    face = Face(face)
+    bound = _fixed_boundary(block, face)
+    mask = _face_mask(block, face, where)
+    cells = _face_cells(block, face)
+    dtype, device = block.velocity.dtype, block.velocity.device
+
+    area = _face_cell_areas(block, face).reshape(cells).to(dtype=dtype, device=device)
+    area = area * mask.reshape(cells)
+    total = area.sum()
+    if not total > 0:
+        raise ValueError(f"The mask selects no cell of face {face.name}.")
+    share = area / total
+
+    I = torch.as_tensor(current, dtype=dtype, device=device)  # noqa: E741
+    if I.dim() == 0:
+        values = I * share
+    elif I.dim() == 1:
+        values = I.reshape(-1, *([1] * len(cells))) * share
+    else:
+        raise ValueError(
+            f"current must be a scalar or [batch], got shape {list(I.shape)}."
+        )
+    _write_potential_values(block, face, bound, values, mask)
+
+
 def _set_potential(
     block: _C.Block, face: Face, spec: PotentialSpec, where: torch.Tensor | None
 ) -> None:
     bound = _fixed_boundary(block, face)
     _set_potential_types(block, face, bound, spec, where)
-    if isinstance(spec, Potential.Dirichlet) and spec.value is not None:
+    if (
+        isinstance(spec, (Potential.Dirichlet, Potential.Current))
+        and spec.value is not None
+    ):
         mask = None if where is None else _face_mask(block, face, where)
         _write_potential_values(block, face, bound, spec.value, mask)
 
@@ -525,7 +646,7 @@ def get_bc(
         The face's condition. For ``Scalar`` one spec per channel. For a
         ``Potential`` that varies over the face, its per-cell ``PotentialBC``
         values as an int8 tensor over the face cells (normal dropped, like
-        ``where``). A Dirichlet potential with values carries them as
+        ``where``). A Dirichlet or Current potential with values carries them as
         ``[batch or 1, *face cells]``.
     """
     face = Face(face)
@@ -545,6 +666,14 @@ def get_bc(
             )
         if bc_type == _C.PotentialBC.DIRICHLET:
             return Potential.Dirichlet()
+        if bc_type == _C.PotentialBC.CURRENT and bound.hasPotentialValues():
+            assert bound.potentialValues is not None
+            values = bound.potentialValues
+            return Potential.Current(
+                value=values.reshape(values.shape[0], *_face_cells(block, face)).clone()
+            )
+        if bc_type == _C.PotentialBC.CURRENT:
+            return Potential.Current()
         if bc_type == _C.PotentialBC.OPEN:
             return Potential.Open()
         return Potential.Insulating()

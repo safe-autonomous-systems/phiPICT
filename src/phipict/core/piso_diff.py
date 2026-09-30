@@ -2455,8 +2455,8 @@ def _potential_value_bounds(domain: _C.Domain) -> list[_C.FixedBoundary]:
     """FIXED faces whose prescribed potential values reach the potential kernels.
 
     The values enter :func:`ComputeEpotRHS` and :func:`ComputeCurrentDensityFaceBased`
-    at the face's Dirichlet cells, linearly and never through the matrix, so they
-    are tracked inputs of both.
+    at the face's Dirichlet (prescribed phi) and Current (prescribed current) cells,
+    linearly and never through the matrix, so they are tracked inputs of both.
     """
     bounds = []
     for block in domain.getBlocks():
@@ -2465,7 +2465,7 @@ def _potential_value_bounds(domain: _C.Domain) -> list[_C.FixedBoundary]:
             if (
                 isinstance(bound, _C.FixedBoundary)
                 and bound.hasPotentialValues()
-                and bound.hasPotentialDirichlet()
+                and (bound.hasPotentialDirichlet() or bound.hasPotentialCurrent())
             ):
                 bounds.append(bound)
     return bounds
