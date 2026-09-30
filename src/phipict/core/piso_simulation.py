@@ -311,7 +311,8 @@ def get_fixed_boundary_flux(bound: _C.Boundary, bound_idx: int) -> torch.Tensor:
     Parameters
     ----------
     bound : phipict._C.Boundary
-        A :class:`phipict._C.FixedBoundary` with Dirichlet velocity.
+        A :class:`phipict._C.FixedBoundary` with Dirichlet velocity, or with
+        Neumann (free-slip) velocity, whose flux is zero.
     bound_idx : int
         Face index of the boundary.
 
@@ -326,9 +327,13 @@ def get_fixed_boundary_flux(bound: _C.Boundary, bound_idx: int) -> torch.Tensor:
     Raises
     ------
     ValueError
-        If the velocity is not a Dirichlet condition.
+        If the velocity is neither a Dirichlet nor a Neumann condition.
     """
     assert isinstance(bound, _C.FixedBoundary)
+    if bound.velocityType == _C.BoundaryConditionType.NEUMANN:
+        # free-slip (OpenBoundary): the normal velocity is zero, so is the flux
+        domain = bound.getParentDomain()
+        return torch.zeros([1], dtype=domain.getDtype(), device=domain.getDevice())
     if bound.velocityType != _C.BoundaryConditionType.DIRICHLET:
         raise ValueError("Only DIRICHLET boundaries are supportet")
 

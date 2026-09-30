@@ -23,7 +23,9 @@ amg = ["pyamg>=4.0"]
 # grid plots and image output in phipict.io.output (imported on first use)
 plot = ["matplotlib>=3.9", "imageio"]
 utils = ["psutil"]
-all = ["phipict[plot,utils]"]
+# reading non-XML VTK files in phipict.meshing.read_vtk (imported on first use)
+mesh = ["pyvista>=0.43"]
+all = ["phipict[plot,utils,mesh]"]
 dev = [
     "pre-commit",
     "ruff",

@@ -1,7 +1,7 @@
 Examples
 ========
 
-The scripts in ``examples/`` run small versions of the validation cases in
+The first scripts in ``examples/`` run small versions of the validation cases in
 ``runscripts/validation`` (same grids as the coarsest validation runs) and
 compare the result with the analytical solution. Both need a CUDA GPU.
 
@@ -40,3 +40,36 @@ conducting walls (Hunt flow). The analytical reference is Hunt (1965).
 .. literalinclude:: ../../examples/duct.py
    :language: python
    :start-at: import argparse
+
+Flow past a cylinder
+--------------------
+
+A cylinder in a channel, meshed with :class:`~phipict.meshing.BlockMesh`: an
+O-grid of four blocks around the cylinder inside a 3 x 3 arrangement of channel
+blocks. Only some cell counts are given, the others are inferred from shared
+edges, and the twelve block connections are found automatically. The inflow is a
+parabolic profile, and the solution is written as a VTK time series. ``--three-d``
+extrudes the mesh, periodic in z. See :doc:`meshing`.
+
+.. code-block:: bash
+
+    python examples/cylinder.py --steps 200 --out out/cylinder
+
+.. literalinclude:: ../../examples/cylinder.py
+   :language: python
+   :start-at: def make_mesh
+
+OpenFOAM blockMeshDict
+----------------------
+
+Runs the channel of ``examples/meshes/flow_past_cylinder/blockMeshDict`` (3 x 3
+blocks, read as 2D from its ``empty`` patches) after giving its patches flow
+conditions.
+
+.. code-block:: bash
+
+    python examples/blockmesh_import.py --steps 100
+
+.. literalinclude:: ../../examples/blockmesh_import.py
+   :language: python
+   :start-at: def main

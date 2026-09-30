@@ -973,7 +973,8 @@ void Block::OpenBoundary(const index_t bound, optional<torch::Tensor> passiveSca
 	CheckFaceIndex(bound);
 	CloseConnectedBoudary(bound, true);
 	optional<std::vector<BoundaryConditionType>> scalarType = nullopt;
-	if(!passiveScalar.has_value()){
+	// without a passive scalar there is no scalar condition to set
+	if(!passiveScalar.has_value() && hasPassiveScalar()){
 		scalarType = std::vector<BoundaryConditionType>{BoundaryConditionType::NEUMANN};
 	}
 	MakeFixedBoundary(bound, nullopt, BoundaryConditionType::NEUMANN, passiveScalar, scalarType);

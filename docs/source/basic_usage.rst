@@ -7,47 +7,51 @@ A simulation consists of a :class:`~phipict.Domain` with one or more blocks, and
 Domain and grid
 ---------------
 
-Blocks are defined by their vertex coordinates, a tensor of shape
-``[1, dims, (nz+1,) ny+1, nx+1]``. :mod:`phipict.grid.shapes` has helpers to
-build graded grids:
+A mesh is made with :mod:`phipict.meshing` (see :doc:`meshing`): blocks with a
+number of cells and a grading per axis, and named patches with boundary
+conditions on the faces that are not connected to other blocks:
 
 .. code-block:: python
 
     import torch
     import phipict
-    from phipict.grid import shapes
+    import phipict.meshing as pm
 
     dtype, device = torch.float64, torch.device("cuda")
-    nx, ny = 100, 50
 
-    # Refine towards both walls; "simple" is OpenFOAM's simpleGrading
-    # (other options: "tanh", "chebyshev_identity")
-    y_weights = shapes.make_weights("simple", res=ny, grading=10, refinement="BOTH")
-    grid = shapes.generate_grid_vertices_2D(
-        [ny + 1, nx + 1],
-        [(0.0, -1.0), (10.0, -1.0), (0.0, 1.0), (10.0, 1.0)],  # corners
-        x_weights=y_weights,
-        dtype=dtype,
-    ).to(device)
-    # shapes.extrude_grid_z(grid, res_z=..., weights_z=...) makes it 3D
+    walls = pm.Patch("walls", pm.Wall())                  # no-slip
+    channel = pm.box(
+        (0.0, -1.0), (10.0, 1.0),
+        cells=(100, 50),
+        grading=(None, pm.Symmetric(10.0)),               # refined towards both walls
+        patches=pm.FacePatches(y_minus=walls, y_plus=walls),
+    )
+    mesh = pm.Mesh([channel])
+    mesh.make_periodic("x")
+    # mesh = mesh.extrude((0.0, 2.0), cells=20)           # 3D, periodic in z
 
-    viscosity = torch.tensor([1.0 / 100.0], dtype=dtype)  # 1 / Re
-    domain = phipict.Domain(2, viscosity, name="Channel", device=device, dtype=dtype)
-    block = domain.CreateBlock(vertexCoordinates=grid, name="Block")
+    domain = mesh.get_domain(viscosity=1.0 / 100.0, dtype=dtype, device=device)
+    block = domain.getBlocks()[0]
 
 Boundaries
 ----------
 
-Block sides are addressed as ``"-x"``, ``"+x"``, ``"-y"``, ``"+y"``, ``"-z"``,
-``"+z"`` and are configured before calling ``PrepareSolve``:
+``get_domain`` sets up the solver blocks: coinciding block faces are connected,
+periodic faces made periodic, and each patch gets its condition
+(:class:`~phipict.meshing.Wall`, :class:`~phipict.meshing.FreeSlip`,
+:class:`~phipict.meshing.Inflow`, :class:`~phipict.meshing.Outflow`). Underneath,
+this is the block API of the extension, which can also be used directly; block
+sides are addressed as ``"-x"``, ``"+x"``, ``"-y"``, ``"+y"``, ``"-z"``, ``"+z"``
+and configured before calling ``PrepareSolve``:
 
 .. code-block:: python
 
+    block = domain.CreateBlock(vertexCoordinates=coords, name="Block")
     block.CloseBoundary("-y")   # no-slip wall
     block.CloseBoundary("+y")
     block.MakePeriodic("x")     # periodic in x
-    # block.OpenBoundary("-x")  # open boundary (e.g. symmetry plane)
-    # block.ConnectBlock("+x", other_block, "-x")  # multi-block domains
+    # block.OpenBoundary("-x")  # free-slip wall or symmetry plane
+    # block.ConnectBlock("+x", other_block, "-x", "-y")  # multi-block domains
     domain.PrepareSolve()
 
 Simulation

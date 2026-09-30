@@ -12,6 +12,7 @@ AMG-preconditioned potential solve.
 
    installation
    basic_usage
+   meshing
    mhd
    batching
    examples
