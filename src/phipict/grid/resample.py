@@ -797,16 +797,6 @@ def sample_multi_coords_from_uniform_grid(
 
 # ---------------------------------------------------------------------------
 # Differentiable multi-block resampling.
-#
-# `_C.SampleTransformedGridLocalToGlobalMulti` is a raw pybind binding
-# with no autograd::Function wrapper, so every resampled observation is detached
-# from the simulation graph. The functions below reimplement it in pure torch so
-# gradients reach the source cells, which full-BPTT / SHAC-style training needs
-# for the terminal-value and closed-loop terms of the policy gradient.
-#
-# Nothing here is wired into the observation pipeline yet; see
-# `tests/simulation/test_torch_resample.py` for the validation against the
-# compiled kernel.
 # ---------------------------------------------------------------------------
 
 
@@ -821,21 +811,6 @@ def sample_multi_coords_to_uniform_grid_diff(
     """Differentiable re-implementation of the multi-block uniform resampling.
 
     Pure-torch version of :func:`sample_multi_coords_to_uniform_grid`.
-
-    The compiled ``_C.SampleTransformedGridLocalToGlobalMulti`` kernel
-    performs a bilinear *splat* (scatter) of every source cell centre onto a
-    uniform output grid, accumulating value-weighted contributions and a
-    per-cell weight, and finally normalising by that weight. That operation is
-    linear in the cell *values* (the geometry -- ``coords_list`` and the
-    world->index transform -- is static), so it can be expressed with
-    ``index_add`` and stays differentiable w.r.t. ``data_list``.
-
-    This is the straightforward reference version: it rebuilds all of the
-    (static) geometry on every call, which makes the autograd tape grow by
-    ~8 * n_source_cells index and weight entries *per call*. For anything in a
-    BPTT loop use :class:`DiffMultiblockResampler`, which caches that geometry
-    and can restrict the output to the handful of cells an observation actually
-    reads.
 
     Parameters
     ----------
@@ -1115,7 +1090,9 @@ class DiffMultiblockResampler:
             n_cells *= s
         self.n_cells = n_cells
 
-        # --- geometry: world -> continuous output index -------------------
+        # -------------------------------------------------------------------
+        # Geometry: world -> continuous output index
+        # -------------------------------------------------------------------
         cell_coords_list = []
         vertex_coords_list = []
         for coords in coords_list:
@@ -1187,7 +1164,9 @@ class DiffMultiblockResampler:
         cols = torch.cat(col_parts)
         weights = torch.cat(weight_parts)
 
-        # --- weight normalisation ------------------------------------------
+        # -------------------------------------------------------------------
+        # Weight normalisation
+        # -------------------------------------------------------------------
         wacc = torch.zeros((n_cells,), device=device, dtype=dtype)
         wacc.index_add_(0, rows, weights)
         written = wacc > 0
@@ -1201,7 +1180,9 @@ class DiffMultiblockResampler:
 
         self._written = written
 
-        # --- hole filling: the masks are data-independent, so cache them ----
+        # -------------------------------------------------------------------
+        # Hole filling: the masks are data-independent, so cache them
+        # -------------------------------------------------------------------
         # Each step is  v <- v + conv(v * filled) * scale,  with scale zero
         # outside the newly filled cells. That is exactly the reference update
         # `where(newly, num / den.clamp_min(1), 0)`.
@@ -1224,7 +1205,9 @@ class DiffMultiblockResampler:
                 self._fill_steps.append((filled, newly, scale))
                 filled = filled + newly.to(dtype)
 
-        # --- restriction to the requested output cells ----------------------
+        # -------------------------------------------------------------------
+        # Restriction to the requested output cells
+        # -------------------------------------------------------------------
         self.out_indices: torch.Tensor | None = None
         if out_indices is None:
             self._rows = rows

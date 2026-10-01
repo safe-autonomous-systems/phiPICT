@@ -166,7 +166,7 @@ def make_domain(
             bc.set_bc(block, face, bc.Potential.ThinWall(cw=hartmann_Cw))
 
     # Temperature field. alpha = nu/Pr, so it carries the same L as the viscosity
-    # above -- identical for the L = 1 configs, but Pr would be off by L otherwise.
+    # above. Identical for the L = 1 configs, but Pr would be off by L otherwise
     thermal_diffusivity = torch.tensor(
         [(cfg.domain.U * cfg.domain.L) / (reynolds_number * cfg.prandtl_number)],
         dtype=dtype,
@@ -250,13 +250,7 @@ def make_domain(
     return domain, prep_fn
 
 def set_advection_scheme(cfg: DictConfig, domain: PISOtorch.Domain) -> None:
-    """Select the convective scheme for the momentum equation.
-
-    ``central`` (the default) is the original discretization. It has exactly zero
-    dissipation at the 2*dx mode, so grid-scale oscillations shed by a steep shear
-    layer -- the jet edges here -- have no sink and persist under refinement.
-    ``linear_upwind`` damps that mode while leaving resolved scales alone.
-    """
+    """Select the convective scheme for the momentum equation."""
     scheme = cfg.get("advection_scheme", "central")
     try:
         domain.setAdvectionScheme(getattr(PISOtorch.AdvectionScheme, scheme.upper()))
@@ -273,14 +267,7 @@ def solver_tolerance(cfg: DictConfig, name: str) -> float | SolverTolerance | No
     ``absolute`` (the default) hands the value straight to the solver, which is
     the historical behaviour and stays bit-identical. ``relative`` wraps it as a
     :class:`SolverTolerance`, turning the stop test into
-    ``||r||_2 < rtol * ||b||_2`` -- a demand that means the same thing whatever
-    the duct length, the cell count or the Hartmann number, which is what makes a
-    tolerance chosen on one grid transferable to another.
-
-    The mode is read from ``sim.<name>_tol_mode`` if set, otherwise from the
-    shared ``sim.tol_mode``. ``sim.tol_atol`` is the absolute floor applied on
-    top of a relative tolerance, so a (near) zero RHS does not demand an
-    unreachable residual; it is ignored in absolute mode.
+    ``||r||_2 < rtol * ||b||_2``.
     """
     value = cfg.sim.get(f"{name}_tol", None)
     if value is None:
@@ -722,9 +709,9 @@ def run_validation(cfg: DictConfig):
     dtype = torch.float64 if cfg.precision == "double" else torch.float32
     device = torch.device("cuda")
 
-    # ----------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Domain Setup
-    # ----------------------------------------------------------
+    # -----------------------------------------------------------------------
     domain, prep_fn = make_domain(cfg, dtype=dtype, device=device)
     start_step = 0
     if cfg.get("load_domain", False):
@@ -772,9 +759,9 @@ def run_validation(cfg: DictConfig):
             "(hydrodynamic case)"
         )
 
-    # ----------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Simulation Setup
-    # ----------------------------------------------------------
+    # -----------------------------------------------------------------------
     if cfg.hartmann_number > 0.0:
         sim = make_mhd_simulation(cfg, domain, prep_fn=prep_fn)
     else:
@@ -782,9 +769,9 @@ def run_validation(cfg: DictConfig):
 
     log_interval = int(cfg.log_interval / sim.time_step)
 
-    # ----------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Warmup
-    # ----------------------------------------------------------
+    # -----------------------------------------------------------------------
     logs_warmup = []
     for step in range(start_step, int(cfg.warmup_steps)):
         ok = sim.single_step()
@@ -804,9 +791,9 @@ def run_validation(cfg: DictConfig):
             save_domain(domain, Path("domain"))
             save_metadata({"step": step})
 
-    # ----------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Logging
-    # ----------------------------------------------------------
+    # -----------------------------------------------------------------------
     logs = []
     logger.info("Warmup complete. Starting main logging phase.")
     for step in range(int(cfg.warmup_steps), int(cfg.warmup_steps) + int(cfg.log_steps)):

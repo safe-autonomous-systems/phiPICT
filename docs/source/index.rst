@@ -12,7 +12,7 @@ AMG-preconditioned potential solve.
 
    installation
    basic_usage
-   meshing
+   meshing/index
    mhd
    batching
    examples

@@ -30,9 +30,9 @@ from omegaconf import DictConfig
 DTYPE = torch.float64
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-# MHD GRADIENT TESTS
-# ============================================================================
+# ---------------------------------------------------------------------------
+# MHD gradient tests
+# ---------------------------------------------------------------------------
 
 def make_static_forcing_fn(forcing: float) -> Callable:
     def fn(domain, time_step, **kwargs):
@@ -182,9 +182,9 @@ def make_domain_hunt():
     return domain, e_b, False, prep_fn, stuart_number, dt
 
 
-# ============================================================================
-# Loss Functions
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Loss functions
+# ---------------------------------------------------------------------------
 
 def MSE(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     return torch.mean((a - b)**2)
@@ -257,9 +257,9 @@ def test_optim_stuart_number(
     starts from ``init_stuart_number`` and differentiates through ``it``
     PISO steps per SGD iteration.
     """
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Target: run non-differentiable sim with the true Stuart number
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     target_domain, e_b, is_non_ortho, prep_fn, true_stuart_number, dt = domain_fn()
 
     sim_target = _make_mhd_sim(
@@ -274,9 +274,9 @@ def test_optim_stuart_number(
     )
     sim_target.run(iterations=it, static=static)
 
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Optimization: learn N starting from init_stuart_number
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
 
     stats = []
     start_time = time.perf_counter()

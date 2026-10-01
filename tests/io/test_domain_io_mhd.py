@@ -74,12 +74,7 @@ def _make_domain(hartmann_Cw: float, heat_both_walls: bool) -> _C.Domain:
 
 
 def _fill_fields(domain: _C.Domain, seed: int = 0) -> None:
-    """Put distinguishable data in every saved cell field, ``epot`` included.
-
-    ``epot`` is only materialized by the potential solve, so a freshly built
-    domain has none -- but a checkpoint written mid-episode does, and
-    ``MHDEnv._load_initial_domain`` indexes ``block.epot`` unconditionally.
-    """
+    """Put distinguishable data in every saved cell field, ``epot`` included."""
     block = domain.getBlock(0)
     gen = torch.Generator(device=CUDA_DEVICE).manual_seed(seed)
 

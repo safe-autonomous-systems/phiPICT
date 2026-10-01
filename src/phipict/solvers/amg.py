@@ -306,7 +306,9 @@ class AMGHierarchy:
             f"setup {self.setup_seconds:.1f}s)\n" + "\n".join(rows)
         )
 
-    # -- native (CUDA) representation ----------------------------------------
+    # -----------------------------------------------------------------------
+    # Native (CUDA) representation
+    # -----------------------------------------------------------------------
 
     def native_levels(
         self, dtype: torch.dtype
@@ -366,7 +368,9 @@ class AMGHierarchy:
         self._native_cache[dtype] = result
         return result
 
-    # -- application --------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Application
+    # -----------------------------------------------------------------------
 
     def _smooth(
         self, level: _Level, x: torch.Tensor, b: torch.Tensor, sweeps: int
@@ -431,14 +435,7 @@ class AMGHierarchy:
         torch.Tensor
             The preconditioned residual, same shape as ``r``.
         """
-        # Projecting only on entry and exit. A per-level projection was tried and
-        # reverted: it changed the iteration count by nothing measurable (63 -> 65
-        # on a 61k-unknown test duct) while adding a mean-reduction and a 54 MB
-        # temporary per level per V-cycle, and the small-duct step time went from
-        # 22 s to >150 s on an otherwise identical hierarchy. The projections here
-        # are what keep the preconditioner mapping the range space to itself;
-        # coarse-level constants ride back through P into the fine nullspace,
-        # where this exit projection removes them
+        # Projecting only on entry and exit
         if self.project_constant:
             r = r - r.mean()
         z = self._v_cycle(r, 0)

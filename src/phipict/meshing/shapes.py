@@ -16,9 +16,10 @@
 
 Each builder returns a discretised :class:`~phipict.meshing.MeshBlock`::
 
-    pm.box((0, -1), (10, 1), cells=(128, 64), grading=(None, pm.Symmetric(20)))
-    pm.quad(corners, cells=(32, 16), edges=pm.QuadEdges(y_minus=pm.Arc(center=(0, 0))))
-    pm.annulus((0, 0), 0.5, 1.0, start_angle=135, angle=-90, cells=(24, None))
+    pm.make_box((0, -1), (10, 1), cells=(128, 64), grading=(None, pm.Symmetric(20)))
+    pm.make_quad(corners, cells=(32, 16),
+                 edges=pm.QuadEdges(y_minus=pm.Arc(center=(0, 0))))
+    pm.make_annulus((0, 0), 0.5, 1.0, start_angle=135, angle=-90, cells=(24, None))
 
 Corners are listed in the solver's order, x fastest: ``(-x-y, +x-y, -x+y, +x+y)``
 in 2D, followed by the same four at ``+z`` in 3D. Each axis takes a number of
@@ -50,11 +51,11 @@ __all__ = [
     "EdgeLike",
     "Interpolation",
     "QuadEdges",
-    "annulus",
+    "make_annulus",
     "annulus_radial_weights",
-    "box",
-    "hexa",
-    "quad",
+    "make_box",
+    "make_hexa",
+    "make_quad",
 ]
 
 _DTYPE = torch.float64
@@ -291,7 +292,7 @@ def _pin_edges(coords: torch.Tensor, points: list[list[torch.Tensor]]) -> None:
             coords[tuple(idx)] = pts.T.to(coords.dtype)
 
 
-def box(
+def make_box(
     lower: PointLike,
     upper: PointLike,
     cells: Sequence[int],
@@ -337,7 +338,7 @@ def box(
     return MeshBlock(coords, name, patches or FacePatches())
 
 
-def quad(
+def make_quad(
     corners: Sequence[PointLike] | torch.Tensor,
     cells: Sequence[int | None],
     grading: Sequence[GradingLike] | GradingLike = None,
@@ -377,7 +378,7 @@ def quad(
     return build_block(c, cells, _per_axis(grading, 2), e, patches, name, interpolation)
 
 
-def hexa(
+def make_hexa(
     corners: Sequence[PointLike] | torch.Tensor,
     cells: Sequence[int | None],
     grading: Sequence[GradingLike] | GradingLike = None,
@@ -475,7 +476,7 @@ def annulus_radial_weights(
     return Explicit(weights)
 
 
-def annulus(
+def make_annulus(
     center: PointLike,
     r_inner: float,
     r_outer: float,

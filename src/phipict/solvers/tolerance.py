@@ -12,30 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Scale-invariant tolerance specifications for the linear solvers.
-
-The compiled CG/BiCGStab kernels stop on ``NORM2_NORMALIZED``, i.e.
-
-    ||r||_2 / sqrt(n) < tol
-
-(see ``cg_solver_kernel.cu``; the relative-to-``||r0||`` variant is commented out
-in ``bicgstab_solver_kernel.cu``). The ``sqrt(n)`` removes the dependence on the
-*cell count*, but not on the *magnitude of the right-hand side*. A tolerance that
-is well matched to a short duct therefore becomes a much tighter -- and much more
-expensive, possibly unreachable -- demand in a longer one, where the flow is more
-developed and ``||b||`` is larger.
-
-:class:`SolverTolerance` expresses the tolerance relative to the RHS instead. With
-
-    tol = rtol * ||b||_2 / sqrt(n)
-
-the stop test becomes exactly ``||r||_2 < rtol * ||b||_2``: a true relative
-residual whose meaning is independent of the domain size, the cell volume, ``dt``,
-and the Hartmann/Reynolds numbers. That is what makes a tolerance chosen on the
-small duct transferable to the large one.
-
-Plain floats keep their current absolute meaning everywhere, so this is opt-in.
-"""
+"""Scale-invariant tolerance specifications for the linear solvers."""
 
 from __future__ import annotations
 
@@ -151,7 +128,7 @@ class SolverTolerance:
 
     atol: float or None
         Absolute floor, in the same RMS units as the solver criterion. Prevents
-        over-solving when the RHS is (near) zero -- e.g. the electric potential
+        over-solving when the RHS is (near) zero, e.g. the electric potential
         equation at rest, where ``u x e_b`` is uniform and its divergence
         vanishes. At least one of ``rtol``/``atol`` must be given.
 
@@ -266,10 +243,10 @@ class SolverTolerance:
 
 
 def parse_tolerance(spec: Any) -> float | SolverTolerance | None:
-    """Coerce a config value into a tolerance usable by the simulation.
+    """Convert a config value into a tolerance usable by the simulation.
 
     Accepts ``None``, a number (absolute tolerance, unchanged semantics), a
-    :class:`SolverTolerance`, or a mapping with ``rtol``/``atol`` keys -- the
+    :class:`SolverTolerance`, or a mapping with ``rtol``/``atol`` keys. The
     latter is what a Hydra/OmegaConf config node looks like, e.g.::
 
         tol:

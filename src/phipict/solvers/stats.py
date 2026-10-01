@@ -12,33 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Telemetry for the linear solves.
-
-Every solve in the codebase funnels through
-``piso_diff._linear_solve_wrapper``, and the CUDA kernels already return a
-``LinearSolverResultInfo`` per right-hand side with the final residual, the
-iteration count and a converged flag. Until now that information was discarded
-unless the solve failed, so there was no way to tell how hard the pressure or the
-electric-potential solve was actually working -- or how close it was running to
-``max_iter``.
-
-This module adds an opt-in sink. When no recorder is active nothing is computed
-and nothing is allocated, so the RL inner loop is unaffected.
-
-The residuals are worth reading as physics, not just as solver bookkeeping:
-
-* the pressure residual is the mass-conservation error of the projection;
-* the electric-potential residual is the charge-conservation error. The
-  face-based current density is built so that ``div J`` equals the epot Poisson
-  residual (see ``mhd_simulation.add_lorentz_force``), so an under-converged
-  potential solve feeds a spurious Lorentz force back into the momentum equation.
-
-Usage
------
->>> with SolverStatsRecorder() as rec:
-...     sim.single_step()
->>> rec.summary()["solver/epot/iters_mean"]
-"""
+"""Telemetry for the linear solves."""
 
 from __future__ import annotations
 
@@ -189,7 +163,9 @@ class SolverStatsRecorder:
     records: list[SolverRecord] = field(default_factory=list)
     _agg: dict[str, dict[str, float]] = field(default_factory=dict)
 
-    # -- collection ---------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Collection
+    # -----------------------------------------------------------------------
 
     def add(self, rec: SolverRecord) -> None:
         """Aggregate a single solver record.
@@ -258,7 +234,9 @@ class SolverStatsRecorder:
         self.records.clear()
         self._agg.clear()
 
-    # -- reporting ----------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Reporting
+    # -----------------------------------------------------------------------
 
     @property
     def tags(self) -> Iterable[str]:
@@ -275,10 +253,7 @@ class SolverStatsRecorder:
     def summary(self, prefix: str = "solver") -> dict[str, float]:
         """Flat ``{key: value}`` aggregates, ready for an info dict or a CSV row.
 
-        Keys are ``<prefix>/<tag>/<stat>``. ``rel_res_max`` -- the largest
-        relative residual ``||r||/||b||`` seen for that solve -- is the one to
-        watch: unlike the iteration count it is comparable across domain sizes,
-        and unlike the absolute residual it is comparable across tolerances.
+        Keys are ``<prefix>/<tag>/<stat>``. ``rel_res_max``.
 
         Parameters
         ----------
@@ -342,7 +317,9 @@ class SolverStatsRecorder:
             )
         return "Solver stats:\n" + ("\n".join(lines) if lines else "  (no solves)")
 
-    # -- context management -------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Context management
+    # -----------------------------------------------------------------------
 
     def __enter__(self) -> SolverStatsRecorder:
         _SINKS.append(self)

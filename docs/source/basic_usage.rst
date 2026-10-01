@@ -7,7 +7,7 @@ A simulation consists of a :class:`~phipict.Domain` with one or more blocks, and
 Domain and grid
 ---------------
 
-A mesh is made with :mod:`phipict.meshing` (see :doc:`meshing`): blocks with a
+A mesh is made with :mod:`phipict.meshing` (see :doc:`meshing/index`): blocks with a
 number of cells and a grading per axis, and named patches with boundary
 conditions on the faces that are not connected to other blocks:
 
@@ -20,7 +20,7 @@ conditions on the faces that are not connected to other blocks:
     dtype, device = torch.float64, torch.device("cuda")
 
     walls = pm.Patch("walls", pm.Wall())                  # no-slip
-    channel = pm.box(
+    channel = pm.make_box(
         (0.0, -1.0), (10.0, 1.0),
         cells=(100, 50),
         grading=(None, pm.Symmetric(10.0)),               # refined towards both walls

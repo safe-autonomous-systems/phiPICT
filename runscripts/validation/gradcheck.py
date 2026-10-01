@@ -30,9 +30,9 @@ USE_RANDOM_INPUTS = True
 USE_SCALAR_VISCOSITY = False
 USE_BLOCK_VISCOSITY = False
 
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Convective scheme (see schemes.md)
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Every domain built by a setup function gets ADVECTION_SCHEME applied before the
 # test runs, so the whole suite can be re-run per scheme.
 ADVECTION_SCHEMES = {
@@ -309,9 +309,9 @@ def test_SetupAdvectionVelocity(domain_setup_fn, time_step):
     LOG.info("gradcheck SetupAdvectionVelocity: %s", test)
 
 
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Convective scheme tests
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 def _as_tensor_list(out) -> list:
     if isinstance(out, torch.Tensor):
@@ -648,9 +648,9 @@ def get_test_params(domain_setup_fn):
     return {"domain_setup_fn": domain_setup_fn, "time_step": 0.5}
 
 
-# ============================================================================
-# PISO DOMAIN SETUPS (adapted from test_setups.py)
-# ============================================================================
+# ---------------------------------------------------------------------------
+# PISO domain setups (adapted from test_setups.py)
+# ---------------------------------------------------------------------------
 
 def _make_1block_piso(
     x: int, y: int, z: int = 0,
@@ -803,7 +803,9 @@ _SN2 = [1/_R, 1/(_R+1)]             # S_NORMALISED_2D  (RES_2D = [R, R+1])
 _S3  = [1/_R, 1/_R, 1/_R]           # S_UNIFORM_3D
 
 PISO_DOMAIN_SETUPS: dict = {
-    # ---- 2D simple ----
+    # -----------------------------------------------------------------------
+    # 2D simple
+    # -----------------------------------------------------------------------
     "1Block2D_velX+const_periodic":       lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), vel_blob=False),
     "1Block2D_velX+blob_periodic":        lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), vel_blob=True),
     "1Block2D_velX-blob_periodic":        lambda: _make_1block_piso(_R, _R+1, vel=(-_BV,0), vel_blob=True),
@@ -814,7 +816,9 @@ PISO_DOMAIN_SETUPS: dict = {
     "2Block2D_velX+constY+_periodic":     lambda: _make_2block_piso_2d(_R, _R, _R, vel_blob1=False, vel_blob2=False),
     "2Block2D_velX+-blob_periodic":       lambda: _make_2block_piso_2d(_R, _R, _R, vel2=(-_BV,0), vel_blob1=True, vel_blob2=True),
     "2Block2D_velX+constY+_closed":       lambda: _make_2block_piso_2d(_R, _R, _R, closed_bounds=True, vel_blob1=False, vel_blob2=False),
-    # ---- 2D viscosity ----
+    # -----------------------------------------------------------------------
+    # 2D viscosity
+    # -----------------------------------------------------------------------
     "1Block2D_v_velX+const_periodic":     lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, vel_blob=False),
     "1Block2D_v_velX+blob_periodic":      lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, vel_blob=True),
     "1Block2D_v_velX-blob_periodic":      lambda: _make_1block_piso(_R, _R+1, vel=(-_BV,0), viscosity=_VI, vel_blob=True),
@@ -825,7 +829,9 @@ PISO_DOMAIN_SETUPS: dict = {
     "2Block2D_v_velX+constY+_periodic":   lambda: _make_2block_piso_2d(_R, _R, _R, viscosity=_VI, vel_blob1=False, vel_blob2=False),
     "2Block2D_v_velX+-blob_periodic":     lambda: _make_2block_piso_2d(_R, _R, _R, viscosity=_VI, vel2=(-_BV,0), vel_blob1=True, vel_blob2=True),
     "2Block2D_v_velX+constY+_closed":     lambda: _make_2block_piso_2d(_R, _R, _R, closed_bounds=True, viscosity=_VI, vel_blob1=False, vel_blob2=False),
-    # ---- 2D transform ----
+    # -----------------------------------------------------------------------
+    # 2D transform
+    # -----------------------------------------------------------------------
     "1Block2D_T-I_velX+const_periodic":   lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), transform_strength=[1,1], vel_blob=False),
     "1Block2D_T-u_velX+const_periodic":   lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), domain_scale=_S2, vel_blob=False),
     "1Block2D_T-n_velX+const_periodic":   lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), domain_scale=_SN2, vel_blob=False),
@@ -841,7 +847,9 @@ PISO_DOMAIN_SETUPS: dict = {
     "1Block2D_T-n_velX+blob_closed":      lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), closed_bounds=True, domain_scale=_SN2, vel_blob=True),
     "1Block2D_T-s_velX+blob_closed":      lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), closed_bounds=True, domain_scale=[1,2], vel_blob=True),
     "1Block2D_T-e_velX+blob_closed":      lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), closed_bounds=True, transform_strength=[1.05,1.1], vel_blob=True),
-    # ---- 2D transform + viscosity ----
+    # -----------------------------------------------------------------------
+    # 2D transform + viscosity
+    # -----------------------------------------------------------------------
     "1Block2D_T-I_v_velX+const_periodic": lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, transform_strength=[1,1], vel_blob=False),
     "1Block2D_T-u_v_velX+const_periodic": lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, domain_scale=_S2, vel_blob=False),
     "1Block2D_T-n_v_velX+const_periodic": lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, domain_scale=_SN2, vel_blob=False),
@@ -857,7 +865,9 @@ PISO_DOMAIN_SETUPS: dict = {
     "1Block2D_T-n_v_velX+blob_closed":    lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, closed_bounds=True, domain_scale=_SN2, vel_blob=True),
     "1Block2D_T-s_v_velX+blob_closed":    lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, closed_bounds=True, domain_scale=[1,2], vel_blob=True),
     "1Block2D_T-e_v_velX+blob_closed":    lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, closed_bounds=True, transform_strength=[1.05,1.1], vel_blob=True),
-    # ---- 3D simple ----
+    # -----------------------------------------------------------------------
+    # 3D simple
+    # -----------------------------------------------------------------------
     "1Block3D_velX+const_periodic":       lambda: _make_1block_piso(_R, _R, _R+2, vel=(_BV,0,0), vel_blob=False),
     "1Block3D_velX+blob_periodic":        lambda: _make_1block_piso(_R, _R, _R+2, vel=(_BV,0,0), vel_blob=True),
     "1Block3D_velX-blob_periodic":        lambda: _make_1block_piso(_R, _R, _R+2, vel=(-_BV,0,0), vel_blob=True),
@@ -866,7 +876,9 @@ PISO_DOMAIN_SETUPS: dict = {
     "1Block3D_velZ+blob_periodic":        lambda: _make_1block_piso(_R, _R, _R+2, vel=(0,0,_BV), vel_blob=True),
     "1Block3D_velZ-blob_periodic":        lambda: _make_1block_piso(_R, _R, _R+2, vel=(0,0,-_BV), vel_blob=True),
     "1Block3D_velX+blob_closed":          lambda: _make_1block_piso(_R, _R, _R+2, vel=(_BV,0,0), closed_bounds=True, vel_blob=True),
-    # ---- 3D viscosity ----
+    # -----------------------------------------------------------------------
+    # 3D viscosity
+    # -----------------------------------------------------------------------
     "1Block3D_v_velX+const_periodic":     lambda: _make_1block_piso(_R, _R, _R+2, vel=(_BV,0,0), viscosity=_VI, vel_blob=False),
     "1Block3D_v_velX+blob_periodic":      lambda: _make_1block_piso(_R, _R, _R+2, vel=(_BV,0,0), viscosity=_VI, vel_blob=True),
     "1Block3D_v_velX-blob_periodic":      lambda: _make_1block_piso(_R, _R, _R+2, vel=(-_BV,0,0), viscosity=_VI, vel_blob=True),
@@ -881,7 +893,9 @@ PISO_DOMAIN_SETUPS: dict = {
     "1Block2D_v_velX+blob_duct":          lambda: _make_1block_piso(_R, _R+1, vel=(_BV,0), viscosity=_VI, inflow_outflow=True, vel_blob=True),
     "1Block3D_velX+blob_duct":            lambda: _make_1block_piso(_R, _R, _R+2, vel=(_BV,0,0), inflow_outflow=True, vel_blob=True),
     "1Block3D_v_velX+blob_duct":          lambda: _make_1block_piso(_R, _R, _R+2, vel=(_BV,0,0), viscosity=_VI, inflow_outflow=True, vel_blob=True),
-    # ---- 3D transform + viscosity ----
+    # -----------------------------------------------------------------------
+    # 3D transform + viscosity
+    # -----------------------------------------------------------------------
     "1Block3D_T-I_v_velZ+blob_periodic":  lambda: _make_1block_piso(_R, _R, _R+2, vel=(0,0,_BV), viscosity=_VI, transform_strength=[1,1,1], vel_blob=True),
     "1Block3D_T-u_v_velZ+blob_periodic":  lambda: _make_1block_piso(_R, _R, _R+2, vel=(0,0,_BV), viscosity=_VI, domain_scale=_S3, vel_blob=True),
     "1Block3D_T-e_v_velZ+blob_periodic":  lambda: _make_1block_piso(_R, _R, _R+2, vel=(0,0,_BV), viscosity=_VI, transform_strength=[1.04,1.07,1.1], vel_blob=True),
@@ -979,9 +993,9 @@ def run_piso_tests(
     return results
 
 
-# ============================================================================
-# MHD GRADIENT TESTS
-# ============================================================================
+# ---------------------------------------------------------------------------
+# MHD gradient tests
+# ---------------------------------------------------------------------------
 
 def _init_epot_fields(domain: PISOtorch.Domain) -> None:
     """Allocate epot tensors and build the Poisson matrix (fixed geometry)."""
@@ -1163,9 +1177,9 @@ def make_domain_temp(
     return domain, e_b
 
 
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # MHD gradcheck helpers
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 def _copy_epot_returnable(domain: PISOtorch.Domain, epot_result: torch.Tensor):
     """CopyEpotResultToBlocks variant that returns block epots for gradcheck."""
@@ -1194,9 +1208,9 @@ def _copy_epot_returnable(domain: PISOtorch.Domain, epot_result: torch.Tensor):
     return _Fn.apply(epot_result)
 
 
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # MHD test functions
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 def test_ComputeEpotRHS(domain_fn, label: str = "") -> None:
     """Gradcheck ComputeEpotRHS backward against finite differences."""
@@ -1263,9 +1277,9 @@ def test_CopyEpotResultToBlocks(domain_fn, label: str = "") -> None:
     LOG.info("gradcheck CopyEpotResultToBlocks [%s]: %s", label, test)
 
 
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Full end-to-end MHD chain test
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 def test_mhd_chain(domain_fn, label: str = "") -> None:
     """Gradcheck the full MHD forward chain:
@@ -1309,9 +1323,9 @@ def test_mhd_chain(domain_fn, label: str = "") -> None:
     LOG.info("gradcheck mhd_chain [%s]: %s", label, test)
 
 
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # MHD test registry
-# ----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 MHD_DOMAIN_SETUPS = {
     # key: (factory_fn, factory_kwargs, is_non_ortho)

@@ -112,13 +112,7 @@ def sparse_case():
 
 
 # ---------------------------------------------------------------------------
-# Synthetic 3D case. Every other fixture here is 2D, and the compiled kernel's
-# corner loop read `DIMS<<1` -- which is 4 in 2D (accidentally right) and 6 in 3D
-# (two of the eight trilinear corners silently dropped). Nothing in this file
-# could see that until there was a 3D fixture, and the defect reached production
-# 3D observations. The grid below is deliberately *stretched*, like the MHD duct,
-# so cells are clustered near the walls and the splat lands at non-trivial
-# fractional positions in every axis.
+# Synthetic 3D case
 # ---------------------------------------------------------------------------
 
 SYNTHETIC_OUT_SHAPE_3D = [20, 14, 9]  # (x, y, z)
@@ -150,14 +144,7 @@ def case_3d():
 
 
 def _splat_weights(coords_list, out_shape, dtype, n_corners):
-    """Accumulated splat weight per output cell, using ``n_corners`` corners.
-
-    A trilinear splat gives every source cell total weight 1, distributed over
-    ``2**dims`` corners, so the accumulated weight sums to the number of source
-    cells minus whatever falls outside the grid. Using fewer corners loses weight
-    in a way that is independent of the data -- which is what makes this the
-    sharpest possible probe of the corner loop.
-    """
+    """Accumulated splat weight per output cell, using ``n_corners`` corners."""
     dims = len(coords_list[0].size()) - 2
     device = coords_list[0].device
     out_shape_t = torch.tensor(list(out_shape), dtype=torch.int32)
@@ -208,14 +195,7 @@ def _kernel_weights(coords_list, data_list, out_shape):
 
 
 def test_kernel_uses_all_2n_corners_in_3d(case_3d):
-    """The kernel must splat to all 8 corners in 3D, not 6.
-
-    `resampling.cu` looped `idx < (DIMS<<1)`, i.e. DIMS*2 -- correct in 2D by
-    coincidence (4 == 4), wrong in 3D (6 != 8), dropping corners 110 and 111.
-    Weights are data-independent, so comparing them isolates the corner loop from
-    everything else. Before the fix this failed with the kernel at exactly 0.75 of
-    the correct total weight, the expected value of the two missing corners.
-    """
+    """The kernel must splat to all 8 corners in 3D."""
     coords, data, out_shape = case_3d
     kernel = _kernel_weights(coords, data, out_shape)
     full = _splat_weights(coords, out_shape, data[0].dtype, 1 << 3)

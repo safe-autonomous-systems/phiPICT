@@ -648,30 +648,6 @@ def update_advective_boundaries(
     ValueError
         If a boundary is not part of the domain or not varying.
     """
-    # bounds: list of boundaries that can be updated
-    # velms: velocity tensors to advect the boundary with. one for each boundary or a global value
-    # _LOG.info("adective bound update: %d boundaries", len(bounds))
-    #
-    # `differentiable` keeps this update in the autograd graph. The update itself
-    # is `vel_bound - t*(vel_bound - vel_slice)` -- elementwise torch ops with no
-    # kernel call -- so recording it changes no forward arithmetic whatsoever;
-    # torch.no_grad() controls only whether a graph is built, and trajectories are
-    # bit-identical either way.
-    #
-    # It matters because the outflow velocity is *not* an independent input: in a
-    # duct where every boundary carries a velocity condition, it is what keeps the
-    # pressure problem solvable, and it responds to the inflow. Detaching it makes
-    # the adjoint linearise about a perturbation that does not conserve mass, which
-    # the singular pressure operator's nullspace then absorbs. Measured on the MHD
-    # duct: the integral of the adjoint over a in [0, 0.5] came to -1.17e-03
-    # against a true dJ of +8.70e-03 -- wrong sign, 7x too small -- and the ratio
-    # did not improve from a 4-step to a 24-step horizon.
-    #
-    # Default False so every other environment keeps its current behaviour; the
-    # caller opts in. Note the boundary update is recursive across steps, so a
-    # caller that enables this must detach the domain at chunk boundaries or the
-    # graph will chain into the previous chunk. The flux balance at the end follows
-    # the same flag; see `balance_boundary_fluxes` for what detaching it costs.
     with (
         torch.no_grad() if not differentiable else nullcontext(),
         SAMPLE("advect bounds"),
@@ -1989,9 +1965,7 @@ class Simulation:
 
         ``None`` (the default) means every corrector uses ``pressure_tol``, i.e.
         the historical behaviour. Only the last corrector's pressure survives into
-        the solution -- the earlier ones are intermediate fields that the next
-        corrector overwrites -- so solving them to the final accuracy is wasted
-        work. This is the ``p`` / ``pFinal`` split OpenFOAM makes.
+        the solution.
 
         Returns
         -------
@@ -2029,14 +2003,7 @@ class Simulation:
     def pressure_warm_start(self) -> bool:
         """Seed each pressure solve with the previous sub-step's result.
 
-        Off by default. ``pressure_non_ortho_steps`` is 1 in every current
-        configuration, so the existing ``pstep > 0`` reuse never triggers and every
-        pressure solve starts from zero -- discarding a field that is nearly
-        identical to the one converged one sub-step (dt) earlier.
-
-        An initial guess cannot change the converged answer, only the iteration
-        count, so this is safe by construction. The guesses are detached, so no
-        gradient path is created across sub-steps.
+        Off by default.
 
         Returns
         -------
@@ -2065,13 +2032,6 @@ class Simulation:
 
     def _solve_is_differentiated(self) -> bool:
         """Whether a linear solve issued right now would record a graph.
-
-        ``differentiable`` picks the autograd backend once, at construction, but
-        individual solves opt out of the graph by running under ``torch.no_grad()``
-        (see the ``exclude_*_solve_gradients`` flags). Only a solve that is both
-        needs the autograd backend; the rest can take the in-place path, which is
-        numerically identical -- both end in ``_C.SolveLinear`` -- and does
-        support an initial guess.
 
         Returns
         -------
@@ -2111,14 +2071,6 @@ class Simulation:
     @staticmethod
     def _as_guess(t: torch.Tensor | None) -> torch.Tensor | None:
         """A detached, finite initial iterate for a linear solve, or ``None``.
-
-        An initial guess is a *constant* of the solve: the map being
-        differentiated is ``b -> A^-1 b``, whose Jacobian does not depend on the
-        starting iterate, so detaching here is exact rather than an
-        approximation (see the long comment in
-        ``piso_diff.linear_solve_GPU``). The finiteness guard mirrors the
-        one ``MHDSimulation._epot_initial_guess`` already applies -- a NaN guess
-        would poison a solve that would otherwise have converged from zero.
 
         Parameters
         ----------
@@ -2169,21 +2121,6 @@ class Simulation:
 
     def _pressure_rank_deficient(self, P: _C.CSRmatrix | None) -> bool:
         """Check whether the pressure Poisson operator has the constant nullspace.
-
-        True when the matrix is pure Neumann, i.e. no boundary prescribes a
-        pressure value. That is the case for the MHD duct, where every face
-        carries a velocity condition (Dirichlet inflow, varying outflow, walls):
-        the row sums are then exactly zero and ``1`` spans both ``null(A)`` and
-        ``null(A^T)``.
-
-        Decided from the assembled matrix rather than from the boundary flags so
-        it cannot drift out of sync with how the kernel actually builds the rows.
-        The row-sum reduction runs once per matrix object -- ``PrepareSolve``
-        allocates it once and only rebinds ``.value`` afterwards -- and the answer
-        is cached against that object's identity.
-
-        Only the *adjoint* solve uses this (``adjoint_rank_deficient``); the
-        forward is left exactly as it was.
 
         Parameters
         ----------
@@ -3142,11 +3079,13 @@ class Simulation:
         else:
             if max_iter == None:  # noqa: E711
                 max_iter = self.linear_solve_max_iterations
+
             # Single choke point for every solve in the codebase: a relative
             # SolverTolerance is turned into the absolute number the kernels
             # expect here, against this solve's own RHS. Floats pass through
-            # untouched, so absolute tolerances keep their exact behaviour.
+            # untouched, so absolute tolerances keep their exact behaviour
             batch = self.domain.getBatchSize() if self.domain is not None else 1
+            
             # batched environments share the tolerance settings, but a relative
             # tolerance is resolved against each environment's own RHS
             abs_tol: Any = resolve_tolerance(tol, rhs, batch_size=batch)
@@ -3157,20 +3096,7 @@ class Simulation:
                 abs_tol = torch.tensor(abs_tol, dtype=torch.float64).repeat_interleave(
                     rows // batch
                 )
-            # AMG is *outside-an-autograd.Function-only*, not forward-only.
-            # `linear_solve_AMG` is plain tensor ops -- no autograd.Function, no
-            # no_grad -- so calling it here on a differentiated solve would trace
-            # every CG iteration and every V-cycle of the preconditioner. That is
-            # wrong twice over: it yields the gradient of a truncated iteration
-            # rather than the adjoint of the solve, and it retains the whole
-            # hierarchy per iteration (the potential solve's 10-level hierarchy has
-            # ~108M nnz; the run is killed by the host OOM killer inside
-            # amg_pcg_solve).
-            #
-            # A differentiated solve still gets AMG, just from inside
-            # `piso_diff.LinearSolveFunction`, whose forward and backward both
-            # run with grad disabled -- so the hierarchy is threaded through
-            # `linear_solve_GPU` below rather than used here.
+
             if amg_hierarchy is not None and not self._solve_is_differentiated():
                 assert abs_tol is not None
                 return self.linear_solve_AMG(

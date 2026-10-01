@@ -1,16 +1,5 @@
 """Ablation of the linear-solver features on fluidgym environments.
 
-Each variant (``runscripts/configs/solver_perf/<name>.yaml``) sets every switch of the
-solver stack, from ``legacy_pict`` (cuBLAS/cuSPARSE CG/BiCGStab, no preconditioning, no
-warm starts -- the behaviour of the original PICT) to ``full`` (all features). The
-environment is the same for every variant, and so are the solver tolerances. fluidgym is
-not modified: the switches are the global solver settings of phipict and attributes of
-the simulation the environment builds.
-
-Timing: every variant runs the same seeded sequence of uniformly random actions;
-``warmup_steps`` untimed steps (which record the solver statistics) are followed by
-``repeats`` timed env steps. Env construction and reset are not timed.
-
 Usage:
     python runscripts/benchmark/solver_perf/ablate_solver_perf.py
     python runscripts/benchmark/solver_perf/ablate_solver_perf.py solver_perf_env=hartmann_small_2d

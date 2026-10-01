@@ -262,7 +262,7 @@ def _prepare_e_b(
         The field, either ``(3,)`` for the uniform case or
         ``(*spatial, 3)`` (spatial dims kept broadcastable, i.e. size 1 where
         the input was 1) for a varying one, plus the domain's spatial cell
-        shape -- ``None`` in the uniform case, where it is not needed.
+        shape. ``None`` in the uniform case, where it is not needed.
     """
     spatial = _validate_e_b(e_b, domain, dims)
 
@@ -274,7 +274,7 @@ def _prepare_e_b(
         return field, None
 
     # Move the component axis last so the cross products can broadcast against
-    # per-cell vectors, and keep the singleton spatial axes unexpanded -- a
+    # per-cell vectors, and keep the singleton spatial axes unexpanded. A
     # (3, 1, 1, nx) field must not blow up to one vector per cell
     return field.movedim(0, -1).contiguous(), spatial
 
@@ -642,14 +642,6 @@ class MHDSimulation(Simulation):
     def set_magnetic_field(self, e_b: torch.Tensor) -> None:
         """Replace the magnetic field between steps, keeping its autograd graph.
 
-        ``e_b`` takes the same form as the constructor argument and must be of
-        the same kind -- uniform or spatially varying -- as the field the
-        simulation was created with. Setting a field whose value differs from
-        the current one makes the next step recompute ``u x e_b`` and re-solve
-        the potential before the Lorentz force is formed. Setting an equal
-        field is a no-op for the solver, which keeps applying the same action
-        once per checkpoint segment idempotent.
-
         Parameters
         ----------
         e_b: torch.Tensor
@@ -678,13 +670,6 @@ class MHDSimulation(Simulation):
 
     def _get_epot_amg_hierarchy(self, epot_mat: _C.CSRmatrix) -> AMGHierarchy:
         """Return the AMG hierarchy for ``epot_mat``, building it on first use.
-
-        Safe to cache for the whole run: ``SetupEpotMatrix`` runs only from
-        ``SetupEpotOnDomain`` and reads nothing that changes between steps (the
-        kernel hardcodes ``raP = 1.0``), so the matrix values are constant. The
-        cache is keyed on the identity of the matrix object actually passed in,
-        which covers both ways a new one can appear -- ``PrepareSolve()``
-        reallocating it, and a ``potential_solve_dtype`` cast.
 
         Parameters
         ----------

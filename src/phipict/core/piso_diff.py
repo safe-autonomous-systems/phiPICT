@@ -1112,7 +1112,7 @@ def linear_solve_GPU(
     # The matrix is *not* cloned into this closure: a deep copy (value + index
     # + row) per solve is retained for the whole graph and, living in a Python
     # closure, is invisible to torch.autograd.graph hooks. Only the integer
-    # sparsity pattern is captured -- it is never differentiated and is the same
+    # sparsity pattern is captured. It is never differentiated and is the same
     # object on every step, so it costs one pattern rather than one per solve.
     # The values travel through save_for_backward instead, which keeps a single
     # copy.
@@ -1136,14 +1136,6 @@ def linear_solve_GPU(
     # what makes the same hierarchy valid for the adjoint solve.
     use_amg = amg_hierarchy is not None and not use_BiCG
 
-    # `adjoint_rank_deficient` says the operator has the constant nullspace. It
-    # deliberately does *not* touch the forward solve -- neither the kernel flag
-    # above nor the RHS -- so forward trajectories stay bit-identical and this
-    # change is confined to the gradient. The forward is well posed as it stands
-    # because its RHS is compatible by construction (for the pressure Poisson,
-    # `balance_boundary_fluxes` enforces zero net boundary flux). The adjoint RHS
-    # is an incoming gradient with no such guarantee, which is what makes the
-    # backward solve ill-posed on a duct where every boundary prescribes velocity.
     A_rows = csrMat.getRows()
 
     tol_torch = _get_solver_tolerance_torch(
@@ -1294,8 +1286,7 @@ def linear_solve_GPU(
                         # component along null(A^T) that no iterate can reduce,
                         # so CG cannot converge and returns a vector whose scale
                         # is set by the residual floor rather than by the
-                        # gradient -- the mechanism behind the momentum adjoint
-                        # gaining ~1e10 per step on the MHD duct.
+                        # gradient
                         if adjoint_rank_deficient:
                             grad_x = _project_out_constant(grad_x, A_rows)
 
@@ -1305,10 +1296,7 @@ def linear_solve_GPU(
                         # unreachable when ||grad_x|| >> ||b||, and already met at
                         # the zero iterate when ||grad_x|| << ||b||, which returns
                         # a zero adjoint and severs the chain. Rescaling holds it
-                        # to a relative residual, the forward's rtol by default.
-                        #
-                        # After the projection above, so the norm is the one the
-                        # solve actually starts from
+                        # to a relative residual, the forward's rtol by default
                         bwd_tol = _rescaled_bwd_tolerance(
                             tol_torch,
                             grad_x,
@@ -1317,13 +1305,9 @@ def linear_solve_GPU(
                             env_batch=env_batch,
                         )
 
-                        # if not grad_x.eq(0).all(): # will not converge if all 0, but grad should be 0 anyways in that case
-                        # solver_info = _C.SolveLinear(A, grad_x, grad_b, maxit_torch, tol_torch, conv, use_BiCG, False, 0, not transpose, False, return_best_result)
-
-                        # _check_solver_return_infos(solver_info, not transpose, use_BiCG, tol, max_iter, return_best_result, is_FWD=False, debug_out=False)
                         if use_amg:
                             # A^T == A, so the same hierarchy preconditions the
-                            # adjoint solve; grad_b is already a zero iterate.
+                            # adjoint solve; grad_b is already a zero iterate
                             probe = (
                                 solver_stats.Probe(grad_x, tag)
                                 if solver_stats.is_active()

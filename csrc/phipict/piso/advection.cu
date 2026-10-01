@@ -1147,9 +1147,8 @@ __global__ void kPISO_build_scalar_advection_RHS_deferred_GRAD(DomainGPU<scalar_
 		scalar_t fluxesGrad[7] = {0};
 
 		// d/dF flows back into the velocity field, which has no gradient buffer when
-		// only the passive scalar is differentiated -- the usual case for this kernel.
-		// ScatterFluxesGradNDLoop would then fault on a null block.velocity_grad.
-		// The three-cell stencil below targets scalarData_grad and is unaffected.
+		// only the passive scalar is differentiated. ScatterFluxesGradNDLoop would
+		// then fault on a null block.velocity_grad.
 		const bool scatterFluxGrad = s_block.velocity_grad!=nullptr;
 
 		for(index_t channel=0; channel<s_domain.passiveScalarChannels; ++channel){

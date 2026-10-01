@@ -14,31 +14,25 @@ import math
 import torch
 
 import phipict
-from phipict.grid import shapes
-from phipict.grid.helpers import get_cell_centers
+import phipict.meshing as pm
 from phipict import Hook, Hooks
 
 
-def make_domain(
-    nx: int, ny: int, length: float, re: float, dtype: torch.dtype, device: torch.device
-) -> phipict.Domain:
-    # Cells are refined towards both walls to resolve the Hartmann layers
-    y_weights = shapes.make_weights("simple", res=ny, grading=10, refinement="BOTH")
-    grid = shapes.generate_grid_vertices_2D(
-        [ny + 1, nx + 1],
-        [(0.0, -1.0), (length, -1.0), (0.0, 1.0), (length, 1.0)],
-        x_weights=y_weights,
-        dtype=dtype,
-    ).to(device)
-
-    viscosity = torch.tensor([1.0 / re], dtype=dtype)
-    domain = phipict.Domain(2, viscosity, name="Hartmann", device=device, dtype=dtype)
-    block = domain.CreateBlock(vertexCoordinates=grid, name="Block")
-    block.CloseBoundary("-y")  # no-slip, insulating by default
-    block.CloseBoundary("+y")
-    block.MakePeriodic("x")
-    domain.PrepareSolve()
-    return domain
+def make_mesh(nx: int, ny: int, length: float) -> pm.Mesh:
+    """Channel periodic in x between insulating no-slip walls at y = +-1."""
+    walls = pm.Patch("walls", pm.Wall())  # insulating by default
+    block = pm.make_box(
+        (0.0, -1.0),
+        (length, 1.0),
+        cells=(nx, ny),
+        # refined towards both walls to resolve the Hartmann layers
+        grading=(None, pm.Symmetric(10.0)),
+        patches=pm.FacePatches(y_minus=walls, y_plus=walls),
+        name="Block",
+    )
+    mesh = pm.Mesh([block])
+    mesh.make_periodic("x")
+    return mesh
 
 
 def main() -> None:
@@ -49,8 +43,9 @@ def main() -> None:
     args = parser.parse_args()
 
     dtype, device = torch.float64, torch.device("cuda")
-    domain = make_domain(
-        nx=100, ny=50, length=10.0, re=args.re, dtype=dtype, device=device
+    mesh = make_mesh(nx=100, ny=50, length=10.0)
+    domain = mesh.get_domain(
+        viscosity=1.0 / args.re, dtype=dtype, device=device, name="Hartmann"
     )
     block = domain.getBlocks()[0]
 
@@ -80,7 +75,7 @@ def main() -> None:
     for _ in range(args.steps):
         sim.single_step()
 
-    y = get_cell_centers(block.vertexCoordinates)[1, :, 0]
+    y = mesh.blocks[0].cell_centers()[1, :, 0].to(device)
     u = block.velocity[0, 0].mean(dim=-1)
     exact = gradient / stuart * (1 - torch.cosh(args.ha * y) / math.cosh(args.ha))
     err = (u - exact).abs().max() / exact.abs().max()

@@ -49,7 +49,7 @@ O-grid of four blocks around the cylinder inside a 3 x 3 arrangement of channel
 blocks. Only some cell counts are given, the others are inferred from shared
 edges, and the twelve block connections are found automatically. The inflow is a
 parabolic profile, and the solution is written as a VTK time series. ``--three-d``
-extrudes the mesh, periodic in z. See :doc:`meshing`.
+extrudes the mesh, periodic in z. See :doc:`meshing/index`.
 
 .. code-block:: bash
 

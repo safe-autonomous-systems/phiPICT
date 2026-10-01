@@ -19,42 +19,35 @@ import numpy as np
 import torch
 
 import phipict
-from phipict import Face, Hook, Hooks, bc
-from phipict.grid import shapes
-from phipict.grid.helpers import get_cell_centers
+import phipict.meshing as pm
+from phipict import Hook, Hooks, bc
 
 
-def make_domain(
-    re: float, cw: float, dtype: torch.dtype, device: torch.device
-) -> phipict.Domain:
+def make_mesh(cw: float) -> pm.Mesh:
+    """Square duct, periodic in x, with walls at y = +-1 and z = +-1."""
     nx, ny, nz, length = 50, 40, 40, 2.0
-    # Strong refinement towards the thin Hartmann layers (y), milder towards the
-    # side layers (z)
-    y_weights = shapes.make_weights("simple", res=ny, grading=200, refinement="BOTH")
-    z_weights = shapes.make_weights("simple", res=nz, grading=50, refinement="BOTH")
-    grid = shapes.generate_grid_vertices_2D(
-        [ny + 1, nx + 1],
-        [(0.0, -1.0), (length, -1.0), (0.0, 1.0), (length, 1.0)],
-        x_weights=y_weights,
-        dtype=dtype,
+    # Thin conducting Hartmann walls: dphi/dn = Cw * laplace_tau(phi)
+    thin_wall = (bc.Potential.ThinWall(cw=cw),) if cw > 0.0 else ()
+    hartmann_walls = pm.Patch("hartmann_walls", pm.Wall(extra=thin_wall))
+    side_walls = pm.Patch("side_walls", pm.Wall())  # insulating
+    block = pm.make_box(
+        (0.0, -1.0, -1.0),
+        (length, 1.0, 1.0),
+        cells=(nx, ny, nz),
+        # Strong refinement towards the thin Hartmann layers (y), milder towards
+        # the side layers (z)
+        grading=(None, pm.Symmetric(200.0), pm.Symmetric(50.0)),
+        patches=pm.FacePatches(
+            y_minus=hartmann_walls,
+            y_plus=hartmann_walls,
+            z_minus=side_walls,
+            z_plus=side_walls,
+        ),
+        name="Block",
     )
-    grid = shapes.extrude_grid_z(
-        grid, res_z=nz, start_z=-1.0, end_z=1.0, weights_z=z_weights
-    )
-    grid = grid.to(device).contiguous()
-
-    viscosity = torch.tensor([1.0 / re], dtype=dtype)
-    domain = phipict.Domain(3, viscosity, name="Duct", device=device, dtype=dtype)
-    block = domain.CreateBlock(vertexCoordinates=grid, name="Block")
-    for side in ("-y", "+y", "-z", "+z"):
-        block.CloseBoundary(side)
-    if cw > 0.0:
-        # Thin conducting Hartmann walls: dphi/dn = Cw * laplace_tau(phi)
-        for face in (Face.Y_MINUS, Face.Y_PLUS):
-            bc.set_bc(block, face, bc.Potential.ThinWall(cw=cw))
-    block.MakePeriodic("x")
-    domain.PrepareSolve()
-    return domain
+    mesh = pm.Mesh([block])
+    mesh.make_periodic("x")
+    return mesh
 
 
 def hunt_profile(
@@ -96,7 +89,10 @@ def main() -> None:
     args = parser.parse_args()
 
     dtype, device = torch.float64, torch.device("cuda")
-    domain = make_domain(args.re, args.cw, dtype=dtype, device=device)
+    mesh = make_mesh(args.cw)
+    domain = mesh.get_domain(
+        viscosity=1.0 / args.re, dtype=dtype, device=device, name="Duct"
+    )
     block = domain.getBlocks()[0]
     gradient = 1.0
 
@@ -123,8 +119,8 @@ def main() -> None:
         sim.single_step()
 
     # velocity has shape [1, 3, nz, ny, nx]
-    centers = get_cell_centers(block.vertexCoordinates)
-    y, z = centers[1, 0, :, 0].cpu().numpy(), centers[2, :, 0, 0].cpu().numpy()
+    centers = mesh.blocks[0].cell_centers()
+    y, z = centers[1, 0, :, 0].numpy(), centers[2, :, 0, 0].numpy()
     u = block.velocity[0, 0].mean(dim=-1).T.cpu().numpy()  # [ny, nz]
     exact = hunt_profile(y, z, args.ha, args.re, gradient, args.cw)
     err = np.abs(u - exact).max() / np.abs(exact).max()

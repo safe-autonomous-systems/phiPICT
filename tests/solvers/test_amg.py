@@ -157,7 +157,7 @@ def test_interpolation_cache_keeps_no_operators() -> None:
 
 
 def test_vcycle_reduces_the_residual() -> None:
-    """One V-cycle must be a contraction -- otherwise it is not a preconditioner."""
+    """One V-cycle must be a contraction. Otherwise it is not a preconditioner."""
     domain, _ = _make_sim(use_amg=False)
     csr = _epot_matrix(domain)
     n = csr.getRows()

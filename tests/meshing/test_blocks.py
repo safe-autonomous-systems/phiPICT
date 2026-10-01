@@ -30,7 +30,7 @@ LEGACY = np.load(Path(__file__).parent / "data" / "legacy_weights.npz")
 
 def test_box_is_tensor_product():
     g = (pm.Simple(3.0), pm.Symmetric(5.0), pm.Tanh(1.5))
-    b = pm.box((0, -1, 2), (2, 1, 3), cells=(4, 6, 5), grading=g)
+    b = pm.make_box((0, -1, 2), (2, 1, 3), cells=(4, 6, 5), grading=g)
     assert b.cells == (4, 6, 5) and b.coords.shape == (3, 6, 7, 5)
     x = 2 * g[0].weights(4)
     y = -1 + 2 * g[1].weights(6)
@@ -46,12 +46,12 @@ def test_straight_tfi_equals_box(ndims):
     lo, hi = (0.0,) * ndims, (1.0, 2.0, 3.0)[:ndims]
     grading = (pm.Simple(2.0), pm.Symmetric(4.0), None)[:ndims]
     cells = (5, 7, 4)[:ndims]
-    box = pm.box(lo, hi, cells, grading)
+    box = pm.make_box(lo, hi, cells, grading)
     corners = [
         tuple(hi[a] if (k >> a) & 1 else lo[a] for a in range(ndims))
         for k in range(2**ndims)
     ]
-    block = (pm.quad if ndims == 2 else pm.hexa)(corners, cells, grading)
+    block = (pm.make_quad if ndims == 2 else pm.make_hexa)(corners, cells, grading)
     assert torch.allclose(block.coords, box.coords, atol=1e-13)
 
 
@@ -61,7 +61,7 @@ def test_arc_edge_lies_on_circle():
         (r * math.cos(math.radians(a)), r * math.sin(math.radians(a)))
         for a in (30, 150)
     ]
-    b = pm.quad(
+    b = pm.make_quad(
         [corners[1], corners[0], (-3, 3), (3, 3)],
         cells=(10, 4),
         grading=(pm.Symmetric(3.0), None),
@@ -69,7 +69,7 @@ def test_arc_edge_lies_on_circle():
     )
     edge = b.coords[:, 0, :]
     assert torch.allclose(edge.norm(dim=0), torch.full((11,), r, dtype=torch.float64))
-    through = pm.quad(
+    through = pm.make_quad(
         [corners[1], corners[0], (-3, 3), (3, 3)],
         cells=(10, 4),
         edges=pm.QuadEdges(y_minus=pm.Arc(through=(0.0, 2.0))),
@@ -86,7 +86,7 @@ def test_points_edge_is_used_verbatim():
     pts = torch.tensor(
         [[0.0, 0.0], [0.3, -0.1], [0.5, -0.12], [1.0, 0.0]], dtype=torch.float64
     )
-    b = pm.quad(
+    b = pm.make_quad(
         [(0, 0), (1, 0), (0, 1), (1, 1)],
         cells=(None, 2),
         edges=pm.QuadEdges(y_minus=pm.Points(pts)),
@@ -94,7 +94,7 @@ def test_points_edge_is_used_verbatim():
     assert b.cells == (3, 2)
     assert torch.equal(b.coords[:, 0].T, pts)
     with pytest.raises(ValueError, match="Conflicting"):
-        pm.quad(
+        pm.make_quad(
             [(0, 0), (1, 0), (0, 1), (1, 1)],
             cells=(5, 2),
             edges=pm.QuadEdges(y_minus=pm.Points(pts)),
@@ -106,10 +106,10 @@ def test_points_edge_is_used_verbatim():
 )
 def test_annulus_matches_legacy_torus(res, r1, r2, angle):
     legacy = torch.from_numpy(LEGACY[f"torus_{res}_{r1}_{r2}_{angle}"])
-    block = pm.annulus((0, 0), r1, r2, 135, angle, cells=(res, None))
+    block = pm.make_annulus((0, 0), r1, r2, 135, angle, cells=(res, None))
     assert block.coords.shape == legacy.shape
     assert torch.allclose(block.coords, legacy, atol=1e-13)
-    rows = pm.quad(
+    rows = pm.make_quad(
         block.coords[:, [0, 0, -1, -1], [0, -1, 0, -1]].T,
         cells=(res, None),
         grading=(None, pm.annulus_radial_weights(r1, r2, angle, res)),
@@ -124,16 +124,19 @@ def test_annulus_matches_legacy_torus(res, r1, r2, angle):
 
 def test_annulus_orientation():
     assert (
-        float(cell_volumes(pm.annulus((0, 0), 1, 2, 90, -90, (8, 4)).coords).min()) > 0
+        float(cell_volumes(pm.make_annulus((0, 0), 1, 2, 90, -90, (8, 4)).coords).min())
+        > 0
     )
-    ccw = pm.annulus((0, 0), 1, 2, 0, 90, (8, 4))
+    ccw = pm.make_annulus((0, 0), 1, 2, 0, 90, (8, 4))
     assert float(cell_volumes(ccw.coords).max()) < 0  # counter-clockwise: left-handed
     assert float(cell_volumes(ccw.flip("y").coords).min()) > 0
 
 
 def test_flip_permute_remap_patches():
     p = [pm.Patch(n) for n in ("a", "b", "c", "d", "e", "f")]
-    b = pm.box((0, 0, 0), (1, 2, 3), (2, 3, 4), patches=pm.FacePatches.from_faces(p))
+    b = pm.make_box(
+        (0, 0, 0), (1, 2, 3), (2, 3, 4), patches=pm.FacePatches.from_faces(p)
+    )
     f = b.flip("y")
     assert f.patches[Face.Y_MINUS] is p[3] and f.patches[Face.Y_PLUS] is p[2]
     assert torch.equal(f.coords, b.coords.flip(2))
@@ -153,7 +156,7 @@ def test_flip_permute_remap_patches():
 
 
 def test_transforms_keep_right_handed():
-    b = pm.box((0, 0), (2, 1), (4, 3))
+    b = pm.make_box((0, 0), (2, 1), (4, 3))
     for t in (
         b.rotate(30),
         b.translate((1, 2)),
@@ -166,7 +169,7 @@ def test_transforms_keep_right_handed():
     assert torch.allclose(
         r.coords[:, 0, -1], torch.tensor([0.0, 2.0], dtype=torch.float64), atol=1e-14
     )
-    b3 = pm.box((0, 0, 0), (1, 1, 1), (2, 2, 2))
+    b3 = pm.make_box((0, 0, 0), (1, 1, 1), (2, 2, 2))
     r3 = b3.rotate(90, axis=(1, 0, 0))
     assert torch.allclose(
         r3.coords[:, 0, -1, 0],
@@ -177,7 +180,7 @@ def test_transforms_keep_right_handed():
 
 def test_split_concat_roundtrip():
     walls = pm.Patch("walls")
-    b = pm.box(
+    b = pm.make_box(
         (0, 0),
         (3, 1),
         (9, 4),
@@ -195,7 +198,7 @@ def test_split_concat_roundtrip():
 
 
 def test_extrude_matches_legacy_layout():
-    b = pm.box((0, 0), (2, 1), (4, 3))
+    b = pm.make_box((0, 0), (2, 1), (4, 3))
     e = b.extrude((0.0, 1.5), cells=5, grading=pm.Simple(2.0))
     assert e.coords.shape == (3, 6, 4, 5)
     assert torch.equal(e.coords[:2, 3], b.coords)
@@ -205,7 +208,9 @@ def test_extrude_matches_legacy_layout():
 
 
 def test_extend():
-    b = pm.box((0, 0), (1, 1), (4, 4), patches=pm.FacePatches(x_plus=pm.Patch("out")))
+    b = pm.make_box(
+        (0, 0), (1, 1), (4, 4), patches=pm.FacePatches(x_plus=pm.Patch("out"))
+    )
     e = b.extend(Face.X_PLUS, 2.0, 5, grading=pm.Simple(3.0))
     assert e.cells == (9, 4)
     assert torch.allclose(e.coords[0, 0, -1], torch.tensor(3.0, dtype=torch.float64))
@@ -213,16 +218,16 @@ def test_extend():
 
 
 def test_quality():
-    b = pm.box((0, 0), (1, 1), (4, 4))
+    b = pm.make_box((0, 0), (1, 1), (4, 4))
     assert torch.allclose(
         scaled_jacobian(b.coords), torch.ones(4, 4, dtype=torch.float64)
     )
     assert float(non_orthogonality(b.coords).max()) < 1e-6
-    skew = pm.quad([(0, 0), (1, 0), (0.8, 1), (1.8, 1)], cells=(4, 4))
+    skew = pm.make_quad([(0, 0), (1, 0), (0.8, 1), (1.8, 1)], cells=(4, 4))
     assert float(non_orthogonality(skew.coords).max()) > 30
     report = pm.Mesh(
         [
-            pm.box(
+            pm.make_box(
                 (0, 0),
                 (1, 1),
                 (4, 4),
@@ -246,7 +251,8 @@ def test_plot_cycles_palette():
 
     n = len(DEFAULT_PALETTE) + 2
     blocks = [
-        pm.box((float(i), 0.0), (i + 1.0, 1.0), (2, 2), name=f"b{i}") for i in range(n)
+        pm.make_box((float(i), 0.0), (i + 1.0, 1.0), (2, 2), name=f"b{i}")
+        for i in range(n)
     ]
     mesh = pm.Mesh(blocks)
     _, ax = plt.subplots()
@@ -259,3 +265,16 @@ def test_plot_cycles_palette():
     mesh.extrude((0.0, 1.0), 2).plot(ax=ax3, color="k")  # 3D: one z layer
     assert len(ax3.collections) == n
     plt.close("all")
+
+
+def test_cell_centers():
+    b = pm.make_box(
+        (0, 0, 0), (2, 1, 1), (4, 2, 2), grading=(pm.Simple(3.0), None, None)
+    )
+    c = b.cell_centers()
+    assert c.shape == (3, 2, 2, 4)
+    x = b.coords[0, 0, 0]
+    assert torch.allclose(c[0, 0, 0], 0.5 * (x[1:] + x[:-1]))
+    assert torch.allclose(
+        c[1, 0, :, 0], torch.tensor([0.25, 0.75], dtype=torch.float64)
+    )

@@ -122,7 +122,9 @@ class MeshBlock:
         """
         return cls(coords, name, patches or FacePatches())
 
-    # ------------------------------------------------------------------ shape
+    # -----------------------------------------------------------------------
+    # Shape
+    # -----------------------------------------------------------------------
 
     @property
     def ndims(self) -> int:
@@ -138,6 +140,22 @@ class MeshBlock:
     def n_cells(self) -> int:
         """Total number of cells."""
         return math.prod(self.cells)
+
+    def cell_centers(self) -> torch.Tensor:
+        """Cell centres, the mean of each cell's corner vertices.
+
+        Returns
+        -------
+        torch.Tensor
+            ``[dims, (nz,) ny, nx]``, the layout of the solver's cell fields
+            without the batch dimension.
+        """
+        c = self.coords
+        for dim in range(1, c.dim()):
+            c = 0.5 * (
+                c.narrow(dim, 0, c.shape[dim] - 1) + c.narrow(dim, 1, c.shape[dim] - 1)
+            )
+        return c
 
     def face_coords(self, face: Face | int) -> torch.Tensor:
         """Vertices of a face.
@@ -169,7 +187,9 @@ class MeshBlock:
         patches = ", ".join(f"{f.name}={p.name}" for f, p in self.patches.items())
         return f"MeshBlock({self.name!r}, cells={cells}, patches=[{patches}])"
 
-    # -------------------------------------------------------------- transforms
+    # -----------------------------------------------------------------------
+    # Transforms
+    # -----------------------------------------------------------------------
 
     def _with(
         self, coords: torch.Tensor, patches: FacePatches | None = None
@@ -247,7 +267,9 @@ class MeshBlock:
         coords[a] = 2.0 * at - coords[a]
         return self._with(coords).flip(0)
 
-    # --------------------------------------------------------- index operations
+    # -----------------------------------------------------------------------
+    # Index operations
+    # -----------------------------------------------------------------------
 
     def flip(self, axis: int | str) -> MeshBlock:
         """With the vertex order along a logical axis reversed.
@@ -344,7 +366,9 @@ class MeshBlock:
         )
         return MeshBlock(coords, self.name, FacePatches.from_faces(merged))
 
-    # -------------------------------------------------------------- 2D -> 3D
+    # -----------------------------------------------------------------------
+    # 2D -> 3D
+    # -----------------------------------------------------------------------
 
     def extrude(
         self,

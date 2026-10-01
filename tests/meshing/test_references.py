@@ -57,7 +57,9 @@ def load(case: str) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
     }
 
 
-# --------------------------------------------------------------------- builders
+# ---------------------------------------------------------------------------
+# Builders
+# ---------------------------------------------------------------------------
 
 
 def cylinder(ndims: int, p: dict[str, Any]) -> pm.Mesh:
@@ -80,13 +82,13 @@ def cylinder(ndims: int, p: dict[str, Any]) -> pm.Mesh:
 
     def ring(start: float) -> pm.MeshBlock:
         # clockwise quarter rings: x along the angle, y outwards
-        return pm.annulus((0.0, 0.0), r, r2, start, -90.0, cells=(n, None))
+        return pm.make_annulus((0.0, 0.0), r, r2, start, -90.0, cells=(n, None))
 
     n_rad = ring(135).cells[1]
     nq = math.ceil(qy / ct * n_rad) - 1  # radial cells of the outer quads
 
     ring_top = ring(135)
-    quad_top = pm.quad(
+    quad_top = pm.make_quad(
         [(-ri, ri), (ri, ri), (-rox, top), (rox, top)],
         cells=(n, nq),
         edges=pm.QuadEdges(y_minus=arc),
@@ -95,7 +97,7 @@ def cylinder(ndims: int, p: dict[str, Any]) -> pm.Mesh:
     block_top.name = "BlockCylinderTop"
 
     ring_right = ring(45).permute("yx").flip("y")  # x outwards, y up
-    quad_right = pm.quad(
+    quad_right = pm.make_quad(
         [(ri, -ri), (rox, -bot), (ri, ri), (rox, top)],
         cells=(nq, n),
         grading=(None, wake_grading),
@@ -105,7 +107,7 @@ def cylinder(ndims: int, p: dict[str, Any]) -> pm.Mesh:
     block_right.name = "BlockCylinderRight"
 
     ring_bot = ring(-45).flip("x").flip("y")  # x to the right, y up (inwards)
-    quad_bot = pm.quad(
+    quad_bot = pm.make_quad(
         [(-rox, -bot), (rox, -bot), (-ri, -ri), (ri, -ri)],
         cells=(n, nq),
         edges=pm.QuadEdges(y_plus=arc),
@@ -114,7 +116,7 @@ def cylinder(ndims: int, p: dict[str, Any]) -> pm.Mesh:
     block_bot.name = "BlockCylinderBottom"
 
     ring_left = ring(-135).permute("yx").flip("x")  # x inwards, y up
-    quad_left = pm.quad(
+    quad_left = pm.make_quad(
         [(-rox, -bot), (-ri, -ri), (-rox, top), (-ri, ri)],
         cells=(nq, n),
         edges=pm.QuadEdges(x_plus=arc),
@@ -122,7 +124,7 @@ def cylinder(ndims: int, p: dict[str, Any]) -> pm.Mesh:
     block_left = quad_left.concat(ring_left, "x")
     block_left.name = "BlockCylinderLeft"
 
-    wake = pm.box(
+    wake = pm.make_box(
         (rox, -bot),
         (x_max, top),
         cells=(int((nq + 1) / qy * 18), n),
@@ -188,13 +190,13 @@ def airfoil(
     inlet = pm.Patch("inlet", pm.Inflow(parabola(-h, h)))
     outlet = pm.Patch("outlet", pm.Outflow())
 
-    left = pm.quad(
+    left = pm.make_quad(
         [(-offset_left, -h), (-front_x, -h), (-offset_left, h), (-front_x, h)],
         cells=(int(0.75 * normal_res) - 1, len(front_pts) - 1),
         patches=pm.FacePatches(x_minus=inlet, y_minus=wall, y_plus=wall),
         name="LeftBlock",
     )
-    front = pm.quad(
+    front = pm.make_quad(
         [(-front_x, -h), b0, (-front_x, h), t0],
         cells=(normal_res - 1, None),
         grading=(fine_at_start, None),
@@ -202,7 +204,7 @@ def airfoil(
         patches=pm.FacePatches(x_plus=foil),
         name="AirfoilFront",
     )
-    top = pm.quad(
+    top = pm.make_quad(
         [t0, t1, (-front_x, h), (t1[0], h)],
         cells=(None, normal_res - 1),
         grading=(None, fine_at_end),
@@ -210,7 +212,7 @@ def airfoil(
         patches=pm.FacePatches(y_minus=foil, y_plus=wall),
         name="AirfoilTop",
     )
-    bottom = pm.quad(
+    bottom = pm.make_quad(
         [(-front_x, -h), (b1[0], -h), b0, b1],
         cells=(None, normal_res - 1),
         grading=(None, fine_at_start),
@@ -219,14 +221,14 @@ def airfoil(
         patches=pm.FacePatches(y_minus=wall, y_plus=foil),
         name="AirfoilBot",
     )
-    tail_upper = pm.quad(
+    tail_upper = pm.make_quad(
         [t1, (L, t1[1]), (t1[0], h), (L, h)],
         cells=(None, normal_res - 1),
         grading=(tail, fine_at_end),
         patches=pm.FacePatches(x_plus=outlet, y_plus=wall),
         name="TailUpper",
     )
-    tail_lower = pm.quad(
+    tail_lower = pm.make_quad(
         [(b1[0], -h), (L, -h), b1, (L, b1[1])],
         cells=(None, normal_res - 1),
         grading=(tail, fine_at_start),
@@ -242,7 +244,7 @@ def airfoil(
 def rbc(ndims: int, p: dict[str, Any]) -> pm.Mesh:
     """Rayleigh-Benard cell: a box graded towards the plates, periodic in x (and z)."""
     plates = pm.Patch("plates", pm.Wall())
-    box = pm.box(
+    box = pm.make_box(
         (0.0, -0.5),
         (p["L"], 0.5),
         cells=(p["x"], p["y"]),
@@ -272,7 +274,9 @@ def build(case: str) -> tuple[pm.Mesh, dict[str, Any], dict[str, np.ndarray]]:
 CASES = ["cylinder2d", "cylinder3d", "airfoil2d", "airfoil3d", "rbc2d", "rbc3d"]
 
 
-# ------------------------------------------------------------------------ tests
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("case", CASES)

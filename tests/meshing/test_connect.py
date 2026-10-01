@@ -59,7 +59,7 @@ def _channel(ndims: int, n: int, orientation=None) -> pm.Mesh:
     lo, hi = (0.0,) * ndims, (1.0,) * ndims
     cells = (n,) * ndims
     fp = pm.FacePatches(y_minus=walls, y_plus=walls)
-    a = pm.box(
+    a = pm.make_box(
         lo,
         hi,
         cells,
@@ -67,7 +67,7 @@ def _channel(ndims: int, n: int, orientation=None) -> pm.Mesh:
         patches=fp,
         name="a",
     )
-    b = pm.box(
+    b = pm.make_box(
         (1.0,) + lo[1:],
         (2.0,) + hi[1:],
         cells,
@@ -122,7 +122,9 @@ def _run(mesh: pm.Mesh, steps: int = 3) -> list[torch.Tensor]:
     return [sb.velocity[0].cpu() for sb in domain.getBlocks()]
 
 
-# ------------------------------------------------------------------ geometry
+# ---------------------------------------------------------------------------
+# Geometry
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("ndims", [2, 3])
@@ -138,14 +140,16 @@ def test_every_orientation_is_connected(ndims):
 
 def test_orientation_codes_2d():
     """The codes of a plain side-by-side pair are those of the hand-written tests."""
-    mesh = pm.Mesh([pm.box((0, 0), (1, 1), (4, 4)), pm.box((1, 0), (2, 1), (4, 4))])
+    mesh = pm.Mesh(
+        [pm.make_box((0, 0), (1, 1), (4, 4)), pm.make_box((1, 0), (2, 1), (4, 4))]
+    )
     (c,) = mesh.connections
     assert (c.face_a, c.face_b) == (Face.X_PLUS, Face.X_MINUS)
     assert c.axis_codes(2)[0] == 2  # "-y": y of b, same direction
     flipped = pm.Mesh(
         [
-            pm.box((0, 0), (1, 1), (4, 4)),
-            pm.box((1, 0), (2, 1), (4, 4)).flip("x").flip("y"),
+            pm.make_box((0, 0), (1, 1), (4, 4)),
+            pm.make_box((1, 0), (2, 1), (4, 4)).flip("x").flip("y"),
         ]
     )
     (c,) = flipped.connections
@@ -154,17 +158,17 @@ def test_orientation_codes_2d():
 
 
 def test_non_conforming_interface_is_reported():
-    a = pm.box((0, 0), (1, 1), (4, 4), name="a")
-    b = pm.box((1, 0), (2, 1), (4, 6), name="b")
+    a = pm.make_box((0, 0), (1, 1), (4, 4), name="a")
+    b = pm.make_box((1, 0), (2, 1), (4, 6), name="b")
     with pytest.raises(pm.NonConformingInterfaceError, match="4.*6|6.*4"):
         pm.Mesh([a, b])
-    c = pm.box((1, 0), (2, 1), (4, 4), grading=(None, 3.0), name="c")
+    c = pm.make_box((1, 0), (2, 1), (4, 4), grading=(None, 3.0), name="c")
     with pytest.raises(pm.NonConformingInterfaceError, match="grading"):
         pm.Mesh([a, c])
 
 
 def test_free_faces_and_check():
-    mesh = pm.Mesh([pm.box((0, 0), (1, 1), (4, 4), name="a")])
+    mesh = pm.Mesh([pm.make_box((0, 0), (1, 1), (4, 4), name="a")])
     report = mesh.check()
     assert not report.ok
     assert "a:X_MINUS" in report.errors[0]
@@ -175,7 +179,7 @@ def test_free_faces_and_check():
 def test_patch_names_and_set_bc():
     inlet = pm.Patch("inlet")
     mesh = pm.Mesh(
-        [pm.box((0, 0), (1, 1), (4, 4), patches=pm.FacePatches.uniform(inlet, 2))]
+        [pm.make_box((0, 0), (1, 1), (4, 4), patches=pm.FacePatches.uniform(inlet, 2))]
     )
     assert not mesh.check().ok  # no condition yet
     with pytest.raises(KeyError, match="Did you mean 'inlet'"):
@@ -190,8 +194,8 @@ def test_extrude_keeps_connections_and_periodicity():
     fp = pm.FacePatches(y_minus=walls, y_plus=walls)
     mesh = pm.Mesh(
         [
-            pm.box((0, 0), (1, 1), (4, 4), patches=fp),
-            pm.box((1, 0), (2, 1), (4, 4), patches=fp),
+            pm.make_box((0, 0), (1, 1), (4, 4), patches=fp),
+            pm.make_box((1, 0), (2, 1), (4, 4), patches=fp),
         ]
     )
     mesh.make_periodic("x")
@@ -208,7 +212,9 @@ def test_extrude_keeps_connections_and_periodicity():
     )
 
 
-# ------------------------------------------------------------------ BlockMesh
+# ---------------------------------------------------------------------------
+# BlockMesh
+# ---------------------------------------------------------------------------
 
 
 def test_blockmesh_infers_cells_and_grading():
@@ -270,7 +276,9 @@ def test_blockmesh_shared_curved_edge():
     assert torch.allclose(a.coords[:, :, -1], b.coords[:, :, 0])
 
 
-# ------------------------------------------------------------------ solver
+# ---------------------------------------------------------------------------
+# Solver
+# ---------------------------------------------------------------------------
 
 
 @needs_cuda

@@ -23,8 +23,9 @@ Three ways to make a :class:`Mesh`, from low to high level::
 
     # 2. blocks from corners, resolution and grading per axis
     walls = pm.Patch("walls", pm.Wall())
-    block = pm.box((0, -1), (10, 1), cells=(128, 64), grading=(None, pm.Symmetric(20)),
-                   patches=pm.FacePatches(y_minus=walls, y_plus=walls))
+    block = pm.make_box((0, -1), (10, 1), cells=(128, 64),
+                        grading=(None, pm.Symmetric(20)),
+                        patches=pm.FacePatches(y_minus=walls, y_plus=walls))
     mesh = pm.Mesh([block])
     mesh.make_periodic("x")
 
@@ -90,11 +91,11 @@ from .shapes import (
     Edge,
     Interpolation,
     QuadEdges,
-    annulus,
     annulus_radial_weights,
-    box,
-    hexa,
-    quad,
+    make_annulus,
+    make_box,
+    make_hexa,
+    make_quad,
 )
 
 __all__ = [
@@ -140,13 +141,13 @@ __all__ = [
     "Tanh",
     "Uniform",
     "Wall",
-    "annulus",
+    "make_annulus",
     "annulus_radial_weights",
     "as_grading",
-    "box",
+    "make_box",
     "cells_for_size",
-    "hexa",
-    "quad",
+    "make_hexa",
+    "make_quad",
     "read_blockmeshdict",
     "read_vtk",
     "write_blockmeshdict",

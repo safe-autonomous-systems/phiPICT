@@ -35,7 +35,7 @@ def _mesh(ndims: int) -> pm.Mesh:
     walls = pm.Patch("walls", pm.Wall())
     fp = pm.FacePatches(y_minus=walls, y_plus=walls)
     lo, hi = (0.0,) * ndims, (1.0,) * ndims
-    a = pm.box(
+    a = pm.make_box(
         lo,
         hi,
         (4, 3, 2)[:ndims],
@@ -43,7 +43,7 @@ def _mesh(ndims: int) -> pm.Mesh:
         patches=fp,
         name="left",
     )
-    b = pm.box(
+    b = pm.make_box(
         (1.0,) + lo[1:],
         (2.5,) + hi[1:],
         (5, 3, 2)[:ndims],

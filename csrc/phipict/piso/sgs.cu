@@ -232,7 +232,7 @@ void k_SGSviscosityIncompressibleWALE(DomainGPU<scalar_t> *p_domain, const scala
 		// The operator is homogeneous of degree 1 in g (nu_t ~ |g|*Delta^2), so it is unbounded
 		// by design. The only degenerate case is 0/0, where both denominator terms underflow to
 		// exactly 0 (e.g. zero/uniform flow); the den>0 guard returns 0 there, so no additive
-		// epsilon -- which would be dimensional and mis-scale the model -- is needed.
+		// epsilon, which would be dimensional and mis-scale the model, is needed.
 		scalar_t opWALE = 0;
 		{
 			const scalar_t num  = SdSd * _sqrtT<scalar_t>(SdSd);

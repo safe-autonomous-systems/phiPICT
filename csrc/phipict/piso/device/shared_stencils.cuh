@@ -27,8 +27,8 @@
  * whether the upwind cell is `pos` itself (then UU is the opposite neighbour) or
  * the neighbour (then UU sits two cells away).
  *
- * Where the stencil is incomplete -- block boundaries, periodic and connected
- * faces -- central differencing is kept for that face. Both PISO_build_matrix
+ * Where the stencil is incomplete (i.e. block boundaries, periodic and connected
+ * faces) central differencing is kept for that face. Both PISO_build_matrix
  * and kPISO_build_advection_RHS call this with the same fluxes, so the implicit
  * and explicit parts always agree on which faces are deferred. */
 template <typename scalar_t>

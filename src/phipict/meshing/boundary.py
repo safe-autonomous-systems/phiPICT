@@ -19,7 +19,7 @@ the condition the faces get when the mesh becomes a domain::
 
     inlet = pm.Patch("inlet", pm.Inflow((1.0, 0.0)))
     walls = pm.Patch("walls", pm.Wall())
-    block = pm.box((0, 0), (4, 1), cells=(64, 16),
+    block = pm.make_box((0, 0), (4, 1), cells=(64, 16),
                    patches=pm.FacePatches(x_minus=inlet, y_minus=walls, y_plus=walls))
 
 Imported meshes carry the patch names of the file; their conditions are set with
