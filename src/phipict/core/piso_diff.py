@@ -486,6 +486,39 @@ def _tol_value(tol: float | torch.Tensor) -> float:
     return float(tol)
 
 
+def _achieved_rtol(
+    solver_infos: Sequence[Any] | None, rhs: torch.Tensor, n_rows: int
+) -> list[float] | None:
+    """Return the relative residual each right-hand side of a solve reached.
+
+    Parameters
+    ----------
+    solver_infos : Sequence of result infos or None
+        One info per right-hand side, as returned by the solver, or None if no
+        solve was run.
+    rhs : torch.Tensor
+        Right-hand side(s) of the solve.
+    n_rows : int
+        Number of matrix rows, the length of one right-hand side.
+
+    Returns
+    -------
+    list of float or None
+        ``finalResidual / rhs_scale`` per right-hand side, or None if unknown.
+    """
+    if solver_infos is None or n_rows <= 0 or rhs.numel() % n_rows != 0:
+        return None
+    scales = torch.linalg.vector_norm(
+        rhs.detach().reshape(-1, n_rows).to(torch.float64), dim=1
+    ) / math.sqrt(n_rows)
+    if len(solver_infos) != scales.numel():
+        return None
+    return [
+        float(info.finalResidual) / s if s > 0 else 0.0
+        for info, s in zip(solver_infos, scales.cpu().tolist(), strict=True)
+    ]
+
+
 @overload
 def _rescaled_bwd_tolerance(
     tol_torch: torch.Tensor,
@@ -493,6 +526,7 @@ def _rescaled_bwd_tolerance(
     n_rows: int | None = None,
     fwd_rtol: float | None = None,
     env_batch: int = 1,
+    fwd_achieved: Sequence[float] | None = None,
 ) -> torch.Tensor: ...
 
 
@@ -503,6 +537,7 @@ def _rescaled_bwd_tolerance(
     n_rows: int | None = None,
     fwd_rtol: float | None = None,
     env_batch: int = 1,
+    fwd_achieved: Sequence[float] | None = None,
 ) -> float: ...
 
 
@@ -512,6 +547,7 @@ def _rescaled_bwd_tolerance(
     n_rows: int | None = None,
     fwd_rtol: float | None = None,
     env_batch: int = 1,
+    fwd_achieved: Sequence[float] | None = None,
 ) -> float | torch.Tensor:
     """The absolute tolerance holding the adjoint solve to a *relative* residual.
 
@@ -525,9 +561,13 @@ def _rescaled_bwd_tolerance(
     order: the override of :func:`~phipict.solvers.tolerance.set_adjoint_rtol`,
     the forward solve's own ``fwd_rtol``, or
     :data:`~phipict.solvers.tolerance.ADJOINT_RTOL_FALLBACK` for a forward solve
-    with an absolute tolerance. It is strictly proportional to ``grad_x``, so
-    scaling the loss scales every adjoint iterate and leaves the iteration count
-    unchanged: the gradient is invariant to the loss scale.
+    with an absolute tolerance. Without the override, ``rtol`` is never tighter
+    than the relative residual the forward solve actually reached: the forward
+    map is that inexact solve, and an adjoint pushed beyond its accuracy only
+    stalls and injects noise into the operator's worst-conditioned modes. It is
+    strictly proportional to ``grad_x``, so scaling the loss scales every adjoint
+    iterate and leaves the iteration count unchanged: the gradient is invariant to
+    the loss scale.
 
     Parameters
     ----------
@@ -548,6 +588,9 @@ def _rescaled_bwd_tolerance(
         ``grad_x`` holds. With more than one, every environment gets the
         tolerance of its own part of ``grad_x`` (a tensor with one tolerance per
         right-hand side). Default is 1.
+    fwd_achieved : Sequence of float or None, optional
+        Relative residual the forward solve reached, per right-hand side, or None
+        if unknown. Default is None.
 
     Returns
     -------
@@ -557,9 +600,9 @@ def _rescaled_bwd_tolerance(
     """
     if env_batch > 1:
         return _rescaled_bwd_tolerance_batched(
-            tol_torch, grad_x, n_rows, fwd_rtol, env_batch
+            tol_torch, grad_x, n_rows, fwd_rtol, env_batch, fwd_achieved
         )
-    bwd = float(grad_x.detach().norm())
+    bwd = float(torch.linalg.vector_norm(grad_x.detach().to(torch.float64)))
     if not math.isfinite(bwd) or bwd <= 0:
         return tol_torch
 
@@ -570,6 +613,9 @@ def _rescaled_bwd_tolerance(
     rtol = get_adjoint_rtol()
     if rtol is None:
         rtol = fwd_rtol if fwd_rtol is not None else ADJOINT_RTOL_FALLBACK
+        achieved = [a for a in fwd_achieved or () if math.isfinite(a)]
+        if achieved:
+            rtol = max(rtol, max(achieved))
 
     # Strictly proportional to the adjoint RHS, and so to the loss: a Krylov solve
     # from the zero iterate is then homogeneous in its RHS, and the whole backward
@@ -589,6 +635,7 @@ def _rescaled_bwd_tolerance_batched(
     n_rows: int | None,
     fwd_rtol: float | None,
     env_batch: int,
+    fwd_achieved: Sequence[float] | None = None,
 ) -> torch.Tensor:
     """:func:`_rescaled_bwd_tolerance` for batched environments.
 
@@ -604,12 +651,22 @@ def _rescaled_bwd_tolerance_batched(
     n = int(n_rows) if n_rows else grad_x.numel() // env_batch
     per_env = grad_x.detach().reshape(env_batch, -1)
     rows_per_env = per_env.shape[1] // n
-    rtol = get_adjoint_rtol()
+    override = get_adjoint_rtol()
+    rtol = override
     if rtol is None:
         rtol = fwd_rtol if fwd_rtol is not None else ADJOINT_RTOL_FALLBACK
     rtol = max(rtol, PRECISION_FLOOR_FACTOR * torch.finfo(grad_x.dtype).eps)
+    rtols = torch.full((env_batch,), rtol, dtype=torch.float64)
+    if (
+        override is None
+        and fwd_achieved is not None
+        and len(fwd_achieved) == env_batch * rows_per_env
+    ):
+        achieved = torch.tensor(fwd_achieved, dtype=torch.float64)
+        achieved = torch.nan_to_num(achieved, nan=0.0, posinf=0.0)
+        rtols = torch.maximum(rtols, achieved.reshape(env_batch, -1).amax(dim=1))
     norms = torch.linalg.vector_norm(per_env.to(torch.float64), dim=1).cpu()
-    values = rtol * norms / math.sqrt(max(n, 1))
+    values = rtols * norms / math.sqrt(max(n, 1))
     # environments with a zero or non-finite adjoint RHS keep the forward tolerance
     fallback = (
         tol_torch.detach().cpu().to(torch.float64).reshape(-1)
@@ -810,7 +867,7 @@ def _linear_solve_wrapper(
     BiCG_with_preconditioner: bool = True,
     BiCG_precondition_fallback: bool = False,
     tag: str = "unknown",
-) -> None:
+) -> Sequence[Any] | None:
     """Run one linear solve through the CUDA kernels, writing into ``result``.
 
     A zero right-hand side is short-circuited: ``result`` is zeroed and no solve
@@ -858,6 +915,12 @@ def _linear_solve_wrapper(
     tag : str, optional
         Name the solve is recorded under in :mod:`phipict.solvers.stats`.
         Default is ``"unknown"``.
+
+    Returns
+    -------
+    Sequence of phipict._C.LinearSolverResultInfo or None
+        One result info per right-hand side, or None if the right-hand side is
+        zero and no solve was run.
 
     Raises
     ------
@@ -936,7 +999,7 @@ def _linear_solve_wrapper(
                 return_best_result,
                 BiCGwithPreconditioner=BiCG_with_preconditioner,
             )
-            result = result_dp.to(result.dtype)
+            result.copy_(result_dp)
         # elif not double_fallback:
         #    raise RuntimeWarning("double_fallback is off!")
 
@@ -992,9 +1055,10 @@ def _linear_solve_wrapper(
             is_FWD=is_FWD,
             debug_out=debug_out,
         )
+        return solver_infos
 
-    else:
-        result.zero_()
+    result.zero_()
+    return None
 
 
 def _project_out_constant(v: torch.Tensor, n_rows: int) -> torch.Tensor:
@@ -1220,7 +1284,7 @@ def linear_solve_GPU(
                     # retained, via save_for_backward below.
                     A_fwd = _make_matrix(A_val)
 
-                    _linear_solve_wrapper(
+                    solver_infos = _linear_solve_wrapper(
                         A_fwd,
                         b,
                         x,
@@ -1243,6 +1307,7 @@ def linear_solve_GPU(
 
                     del A_fwd
 
+                ctx.fwd_achieved = _achieved_rtol(solver_infos, b, A_rows)
                 # ctx.save_for_backward(A_val, b, x)
                 ctx.save_for_backward(A_val, x)
 
@@ -1303,6 +1368,7 @@ def linear_solve_GPU(
                             n_rows=A_rows,
                             fwd_rtol=fwd_rtol,
                             env_batch=env_batch,
+                            fwd_achieved=ctx.fwd_achieved,
                         )
 
                         if use_amg:

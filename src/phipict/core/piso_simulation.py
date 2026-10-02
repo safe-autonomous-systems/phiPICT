@@ -58,7 +58,11 @@ from phipict.solvers.amg import (
     is_pyamg_available,
     values_fingerprint,
 )
-from phipict.solvers.tolerance import SolverTolerance, resolve_tolerance
+from phipict.solvers.tolerance import (
+    PRECISION_FLOOR_FACTOR,
+    SolverTolerance,
+    resolve_tolerance,
+)
 from phipict.utils.profiling import SAMPLE
 
 cpu_device = torch.device("cpu")
@@ -2149,9 +2153,13 @@ class Simulation:
         row_sum = torch.zeros(n, dtype=value.dtype, device=value.device).index_add_(
             0, segment, value
         )
-        # Scale-relative: the Laplacian's entries carry the cell metric, so an
-        # absolute threshold would be meaningless across resolutions.
-        deficient = bool((row_sum.abs() > 1e-10 * value.abs().max()).sum().item() == 0)
+        row_abs = torch.zeros(n, dtype=value.dtype, device=value.device).index_add_(
+            0, segment, value.abs()
+        )
+        # Relative to each row's magnitude and the dtype's round-off, so a pure
+        # Neumann matrix assembled in float32 is still recognised
+        floor = PRECISION_FLOOR_FACTOR * torch.finfo(value.dtype).eps
+        deficient = bool((row_sum.abs() <= floor * row_abs).all().item())
         self._pressure_rank_deficient_cache = (P, deficient)
         self.__LOG.debug(
             "Pressure matrix is %s; the adjoint solve %s project out the "
